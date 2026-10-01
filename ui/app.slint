@@ -1,0 +1,386 @@
+import { Button, CheckBox, ComboBox, ListView } from "std-widgets.slint";
+
+export struct TradeRow {
+    key: string,
+    symbol: string,
+    date: string,
+    sale: string,
+    price: string,
+    delta: string,
+    delta-tone: int,
+    target: string,
+    best-buy: string,
+    best-buy-highlight: bool,
+    average-buy: string,
+    average-buy-highlight: bool,
+    pinned: bool,
+    selected: bool,
+}
+
+export struct CandleBar {
+    x: float,
+    width: float,
+    wick-top: float,
+    wick-height: float,
+    body-top: float,
+    body-height: float,
+    up: bool,
+}
+
+component TableCell inherits Rectangle {
+    in property <string> value;
+    in property <length> floor-width: 80px;
+    in property <brush> ink: #dce0e6;
+    in property <bool> numeric: false;
+    in property <bool> strong: false;
+    min-width: floor-width;
+    horizontal-stretch: 1;
+    background: transparent;
+    clip: true;
+    cell-text := Text {
+        x: 6px;
+        width: parent.width - 12px;
+        height: parent.height;
+        text: value;
+        color: ink;
+        font-size: 12px;
+        font-weight: strong ? 700 : 400;
+        horizontal-alignment: numeric ? right : left;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+}
+
+component SortHeader inherits Rectangle {
+    in property <string> title;
+    in property <string> column;
+    in property <string> active-column;
+    in property <bool> ascending;
+    in property <length> floor-width: 80px;
+    in property <bool> numeric: false;
+    callback activated();
+    min-width: floor-width;
+    horizontal-stretch: 1;
+    background: header-area.has-hover ? #2c3138 : transparent;
+    clip: true;
+    Text {
+        x: 6px;
+        width: parent.width - 12px;
+        height: parent.height;
+        text: title + (active-column == column ? (ascending ? " ↑" : " ↓") : "");
+        color: active-column == column ? #6daeff : #8e99a8;
+        font-size: 12px;
+        font-weight: 700;
+        horizontal-alignment: numeric ? right : left;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    header-area := TouchArea { mouse-cursor: pointer; clicked => { root.activated(); } }
+}
+
+component PeriodPill inherits Rectangle {
+    in property <string> label;
+    in property <bool> active;
+    callback activated();
+    width: 100px;
+    height: 32px;
+    border-radius: 16px;
+    border-width: 1px;
+    border-color: active ? #4387ed : #454b55;
+    background: active ? #2269c8 : (area.has-hover ? #343941 : #22252a);
+    accessible-role: button;
+    accessible-label: label;
+    Text { text: label; color: active ? #ffffff : #bdc5cf; font-size: 12px;
+        font-weight: active ? 700 : 400; horizontal-alignment: center; vertical-alignment: center; }
+    area := TouchArea { mouse-cursor: pointer; clicked => { root.activated(); } }
+}
+
+export component AppWindow inherits Window {
+    title: "IBKR Companion";
+    icon: @image-url("../resources/IBKR.png");
+    preferred-width: 1240px;
+    preferred-height: 790px;
+    min-width: 1020px;
+    min-height: 580px;
+    background: #17191d;
+
+    private property <bool> detail-visible: false;
+    private property <bool> show-extra-columns: false;
+    changed width => { root.show-extra-columns = root.width >= (root.detail-visible ? 1300px : 1000px); }
+    changed detail-visible => { root.show-extra-columns = root.width >= (root.detail-visible ? 1300px : 1000px); }
+
+    in property <[TradeRow]> rows;
+    in property <string> connection-status: "Connecting to Client Portal…";
+    in property <string> count-text: "Loading recent exits";
+    in property <string> selected-symbol: "Select a stock";
+    in property <string> selected-key: "";
+    in property <string> selected-detail: "Recent exits and market data will appear here.";
+    in property <[CandleBar]> chart-bars;
+    in property <string> chart-status: "Select a stock to load IBKR candlesticks";
+    in property <string> chart-caption: "";
+    in property <string> chart-high: "";
+    in property <string> chart-low: "";
+    in property <string> chart-first-time: "";
+    in property <string> chart-last-time: "";
+    in property <string> selected-quote: "";
+    in-out property <string> selected-target: "";
+    in-out property <string> selected-mode: "Price";
+    in-out property <bool> selected-alert: false;
+    in property <string> alert-text: "";
+    in property <string> sort-column: "delta";
+    in property <bool> sort-ascending: true;
+    in-out property <string> filter-value: "All exits";
+    in-out property <string> period-value: "Inception";
+    callback refresh();
+    callback select(string);
+    callback filter-changed(string);
+    callback period-changed(string);
+    callback sort-changed(string);
+    callback target-saved(string, string);
+    callback alert-changed(bool);
+    callback pin-selected();
+    callback reset-alert();
+    callback snooze-alert();
+
+    VerticalLayout {
+        padding: 22px;
+        spacing: 16px;
+
+        HorizontalLayout {
+            height: 70px;
+            spacing: 16px;
+            VerticalLayout {
+                spacing: 3px;
+                HorizontalLayout {
+                    spacing: 5px;
+                    Text { text: "IBKR"; color: #ea223c; font-size: 12px; font-weight: 700; letter-spacing: 1.5px; }
+                    Text { text: "Companion"; color: #d7dce3; font-size: 12px; font-weight: 700; letter-spacing: 1.5px; }
+                }
+                Text { text: "Recent exits & re-entry"; color: #eceef1; font-size: 28px; font-weight: 700; }
+                Text { text: "Prices per share in each contract's trading currency"; color: #84909c; font-size: 11px; }
+            }
+            Rectangle { horizontal-stretch: 1; background: transparent; }
+            VerticalLayout {
+                alignment: center;
+                Text { text: root.connection-status; color: #aab3bf; font-size: 12px; horizontal-alignment: right; }
+                Text { text: root.count-text; color: #d7dce3; font-size: 13px; horizontal-alignment: right; }
+            }
+            Button { text: "Refresh"; clicked => { root.refresh(); } }
+        }
+
+        Rectangle {
+            height: 62px;
+            border-radius: 10px;
+            background: #22252a;
+            border-color: #3b3f46;
+            border-width: 1px;
+            HorizontalLayout {
+                padding: 12px;
+                spacing: 12px;
+                ComboBox {
+                    width: 145px;
+                    model: ["All exits", "Below exit", "Target reached", "Pinned"];
+                    current-value: root.filter-value;
+                    selected(value) => { root.filter-value = value; root.filter-changed(value); }
+                }
+                for period in ["1 Week", "1 Month", "1 Year", "Year to Date", "Inception"]: PeriodPill {
+                    label: period;
+                    active: root.period-value == period;
+                    activated => { root.period-value = period; root.period-changed(period); }
+                }
+                Rectangle { horizontal-stretch: 1; background: transparent; }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 12px;
+            vertical-stretch: 1;
+            Rectangle {
+                min-width: 600px;
+                horizontal-stretch: 1;
+                border-radius: 10px;
+                background: #1c1f24;
+                border-color: #3b3f46;
+                border-width: 1px;
+                VerticalLayout {
+                    padding: 12px;
+                    spacing: 9px;
+                    HorizontalLayout {
+                        height: 30px;
+                        spacing: 10px;
+                        Text { text: "RECENT EXITS"; color: #9aa4b0; font-size: 11px; font-weight: 700; letter-spacing: 1px; }
+                        Rectangle { horizontal-stretch: 1; background: transparent; }
+                        Button {
+                            text: root.detail-visible ? "Hide details" : "Show details";
+                            height: 28px;
+                            clicked => { root.detail-visible = !root.detail-visible; }
+                        }
+                    }
+                    Rectangle {
+                        height: 32px;
+                        min-width: 0px;
+                        background: #191b20;
+                        border-radius: 4px;
+                        HorizontalLayout {
+                            padding-left: 4px;
+                            padding-right: 4px;
+                            spacing: 0px;
+                            SortHeader { title: "SYMBOL"; column: "symbol"; active-column: root.sort-column; ascending: root.sort-ascending; floor-width: 75px; activated => { root.sort-changed("symbol"); } }
+                            if root.show-extra-columns : SortHeader { title: "EXIT TIME"; column: "date"; active-column: root.sort-column; ascending: root.sort-ascending; floor-width: 115px; activated => { root.sort-changed("date"); } }
+                            SortHeader { title: "BEST BUY"; column: "best_buy"; active-column: root.sort-column; ascending: root.sort-ascending; floor-width: 85px; numeric: true; activated => { root.sort-changed("best_buy"); } }
+                            SortHeader { title: "VWAP BUY"; column: "average_buy"; active-column: root.sort-column; ascending: root.sort-ascending; floor-width: 95px; numeric: true; activated => { root.sort-changed("average_buy"); } }
+                            SortHeader { title: "EXIT"; column: "exit"; active-column: root.sort-column; ascending: root.sort-ascending; floor-width: 70px; numeric: true; activated => { root.sort-changed("exit"); } }
+                            SortHeader { title: "MARKET"; column: "market"; active-column: root.sort-column; ascending: root.sort-ascending; floor-width: 75px; numeric: true; activated => { root.sort-changed("market"); } }
+                            SortHeader { title: "VS EXIT"; column: "delta"; active-column: root.sort-column; ascending: root.sort-ascending; floor-width: 90px; numeric: true; activated => { root.sort-changed("delta"); } }
+                            SortHeader { title: "TARGET"; column: "target"; active-column: root.sort-column; ascending: root.sort-ascending; floor-width: 70px; numeric: true; activated => { root.sort-changed("target"); } }
+                        }
+                    }
+                    ListView {
+                        min-width: 0px;
+                        vertical-stretch: 1;
+                        for row[index] in root.rows : Rectangle {
+                            width: parent.width;
+                            height: 43px;
+                            background: row.selected ? #34383e : Math.mod(index, 2) == 0 ? #202329 : #1c1f24;
+                            clip: true;
+                            Rectangle { width: 3px; height: parent.height - 1px; background: row.selected ? #2c72d0 : transparent; }
+                            Rectangle { y: parent.height - 1px; width: parent.width; height: 1px; background: #353a42; }
+                            HorizontalLayout {
+                                padding-left: 4px;
+                                padding-right: 4px;
+                                spacing: 0px;
+                                TableCell { value: (row.pinned ? "★  " : "") + row.symbol; floor-width: 75px; ink: #f0f2f5; strong: true; }
+                                if root.show-extra-columns : TableCell { value: row.date; floor-width: 115px; ink: #a5aeb9; }
+                                TableCell { value: row.best-buy; floor-width: 85px; ink: row.best-buy-highlight ? #e5b94f : #c1c8d1; numeric: true; }
+                                TableCell { value: row.average-buy; floor-width: 95px; ink: row.average-buy-highlight ? #e5b94f : #c1c8d1; numeric: true; }
+                                TableCell { value: row.sale; floor-width: 70px; numeric: true; }
+                                TableCell { value: row.price; floor-width: 75px; ink: #f0f2f5; numeric: true; strong: true; }
+                                TableCell { value: row.delta; floor-width: 90px; ink: row.delta-tone > 0 ? #00a36c : row.delta-tone < 0 ? #e2374a : #a5aeb9; numeric: true; }
+                                TableCell { value: row.target; floor-width: 70px; ink: #c1c8d1; numeric: true; }
+                            }
+                            TouchArea { clicked => { root.detail-visible = true; root.select(row.key); } }
+                        }
+                    }
+                }
+            }
+            if root.detail-visible : Rectangle {
+                min-width: 360px;
+                preferred-width: 400px;
+                max-width: 440px;
+                horizontal-stretch: 0;
+                border-radius: 10px;
+                background: #22252a;
+                border-color: #3b3f46;
+                border-width: 1px;
+                VerticalLayout {
+                    padding: 12px;
+                    spacing: 6px;
+                    HorizontalLayout {
+                        height: 32px;
+                        Text { text: root.selected-symbol; color: #f0f2f5; font-size: 23px; font-weight: 700; }
+                        Rectangle { horizontal-stretch: 1; background: transparent; }
+                        Button { text: "Hide details"; height: 28px; clicked => { root.detail-visible = false; } }
+                    }
+                    Text { text: root.selected-quote; color: #6daeff; font-size: 13px; wrap: word-wrap; min-width: 0px; }
+                    Text { text: root.selected-detail; color: #c3cad3; font-size: 13px; wrap: word-wrap; min-width: 0px; }
+                    Rectangle { height: 1px; background: #3d424b; }
+                    Text { text: "IBKR 15-MINUTE CANDLES"; color: #9aa4b0; font-size: 11px; font-weight: 700; }
+                    Text { text: root.chart-caption; color: #aab3bf; font-size: 11px; }
+                    if root.chart-high != "" : HorizontalLayout {
+                        height: 17px;
+                        Text { text: "High  " + root.chart-high; color: #9da7b3; font-size: 11px; }
+                        Rectangle { horizontal-stretch: 1; background: transparent; }
+                    }
+                    if root.chart-high != "" : Rectangle {
+                        height: 140px;
+                        background: #171a1f;
+                        border-color: #3b4048;
+                        border-width: 1px;
+                        border-radius: 5px;
+                        plot := Rectangle {
+                            x: 8px;
+                            y: 8px;
+                            width: parent.width - 16px;
+                            height: parent.height - 16px;
+                            background: transparent;
+                            clip: true;
+                            Rectangle { y: parent.height * 0.25; height: 1px; width: parent.width; background: #2c3138; }
+                            Rectangle { y: parent.height * 0.50; height: 1px; width: parent.width; background: #2c3138; }
+                            Rectangle { y: parent.height * 0.75; height: 1px; width: parent.width; background: #2c3138; }
+                            for bar in root.chart-bars : Rectangle {
+                                x: plot.width * bar.x;
+                                y: 0px;
+                                width: max(2px, plot.width * bar.width);
+                                height: plot.height;
+                                background: transparent;
+                                Rectangle {
+                                    x: parent.width / 2 - 1px;
+                                    y: parent.height * bar.wick-top;
+                                    width: 2px;
+                                    height: max(1px, parent.height * bar.wick-height);
+                                    background: bar.up ? #00a36c : #e2374a;
+                                }
+                                Rectangle {
+                                    x: 1px;
+                                    y: parent.height * bar.body-top;
+                                    width: max(2px, parent.width - 2px);
+                                    height: max(2px, parent.height * bar.body-height);
+                                    background: bar.up ? #00a36c : #e2374a;
+                                }
+                            }
+                        }
+                    }
+                    if root.chart-high != "" : HorizontalLayout {
+                        height: 17px;
+                        Text { text: root.chart-first-time + " ET"; color: #8e99a8; font-size: 11px; }
+                        Rectangle { horizontal-stretch: 1; background: transparent; }
+                        Text { text: root.chart-last-time + " ET"; color: #8e99a8; font-size: 11px; }
+                    }
+                    if root.chart-high != "" : HorizontalLayout {
+                        height: 17px;
+                        Text { text: "Low  " + root.chart-low; color: #9da7b3; font-size: 11px; }
+                        Rectangle { horizontal-stretch: 1; background: transparent; }
+                    }
+                    Text { text: root.chart-status; color: #aab3bf; font-size: 12px; wrap: word-wrap; min-width: 0px; }
+                    Rectangle { height: 1px; background: #3d424b; }
+                    Text { text: "RE-ENTRY TARGET"; color: #9aa4b0; font-size: 11px; font-weight: 700; }
+                    HorizontalLayout {
+                        height: 36px;
+                        spacing: 8px;
+                        ComboBox {
+                            width: 120px;
+                            model: ["Price", "% below exit"];
+                            current-value: root.selected-mode;
+                            selected(value) => { root.selected-mode = value; }
+                        }
+                        Rectangle {
+                            horizontal-stretch: 1;
+                            background: #171a1f;
+                            border-color: #3d424b;
+                            border-width: 1px;
+                            border-radius: 5px;
+                            TextInput {
+                                x: 9px; y: 5px; width: parent.width - 18px; height: parent.height - 10px;
+                                text: root.selected-target;
+                                color: #e2e6eb;
+                                font-size: 14px;
+                                edited => { root.selected-target = self.text; }
+                                accepted => { root.target-saved(root.selected-mode, self.text); }
+                            }
+                        }
+                        Button { text: "Save"; clicked => { root.target-saved(root.selected-mode, root.selected-target); } }
+                    }
+                    CheckBox { text: "Alert on fresh crossing"; checked: root.selected-alert; toggled => { root.selected-alert = self.checked; root.alert-changed(self.checked); } }
+                    HorizontalLayout {
+                        spacing: 7px;
+                        Button { text: "Pin / unpin"; clicked => { root.pin-selected(); } }
+                        Button { text: "Reset alert"; clicked => { root.reset-alert(); } }
+                        Button { text: "Snooze 15m"; clicked => { root.snooze-alert(); } }
+                    }
+                    Text { text: root.alert-text; color: #d2a14a; font-size: 12px; wrap: word-wrap; min-width: 0px; }
+                    Rectangle { vertical-stretch: 1; background: transparent; }
+                }
+            }
+        }
+    }
+}

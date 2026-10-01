@@ -1,0 +1,668 @@
+{
+  "contracts": {
+    "U1:76792991": [
+      "U1",
+      76792991,
+      "TSLA"
+    ],
+    "U1:370757467": [
+      "U1",
+      370757467,
+      "CRWD"
+    ],
+    "U1:4493": [
+      "U1",
+      4493,
+      "APH"
+    ],
+    "U1:70101545": [
+      "U1",
+      70101545,
+      "MRK"
+    ],
+    "U1:4813508": [
+      "U1",
+      4813508,
+      "INOD"
+    ],
+    "U1:134306225": [
+      "U1",
+      134306225,
+      "SAIC"
+    ],
+    "U1:899700992": [
+      "U1",
+      899700992,
+      "SKHY"
+    ],
+    "U1:383858515": [
+      "U1",
+      383858515,
+      "DDOG"
+    ],
+    "U1:29624264": [
+      "U1",
+      29624264,
+      "CRM"
+    ],
+    "U1:4391": [
+      "U1",
+      4391,
+      "AMD"
+    ],
+    "U1:547605251": [
+      "U1",
+      547605251,
+      "RGTI"
+    ],
+    "U1:541265127": [
+      "U1",
+      541265127,
+      "CRDO"
+    ],
+    "U1:346218218": [
+      "U1",
+      346218218,
+      "DELL"
+    ],
+    "U1:771759702": [
+      "U1",
+      771759702,
+      "CRWV"
+    ],
+    "U1:88819736": [
+      "U1",
+      88819736,
+      "NBIS"
+    ],
+    "U1:466188387": [
+      "U1",
+      466188387,
+      "HIMS"
+    ],
+    "U1:45157951": [
+      "U1",
+      45157951,
+      "LULU"
+    ],
+    "U1:15124833": [
+      "U1",
+      15124833,
+      "NFLX"
+    ],
+    "U1:115324104": [
+      "U1",
+      115324104,
+      "WDAY"
+    ]
+  },
+  "transactions": [
+    {
+      "acctid": "U1",
+      "conid": 4813508,
+      "date": "Mon Aug 17 00:00:00 EDT 2026",
+      "rawDate": "20260817",
+      "type": "Buy",
+      "qty": 1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 466188387,
+      "date": "Mon Aug 24 00:00:00 EDT 2026",
+      "rawDate": "20260824",
+      "type": "Buy",
+      "qty": 1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 4391,
+      "date": "Tue Aug 25 00:00:00 EDT 2026",
+      "rawDate": "20260825",
+      "type": "Buy",
+      "qty": 1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 466188387,
+      "date": "Tue Aug 25 00:00:00 EDT 2026",
+      "rawDate": "20260825",
+      "type": "Sell",
+      "qty": -1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 15124833,
+      "date": "Wed Aug 26 00:00:00 EDT 2026",
+      "rawDate": "20260826",
+      "type": "Buy",
+      "qty": 1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 115324104,
+      "date": "Fri Aug 28 00:00:00 EDT 2026",
+      "rawDate": "20260828",
+      "type": "Buy",
+      "qty": 1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 29624264,
+      "date": "Thu Sep 03 00:00:00 EDT 2026",
+      "rawDate": "20260903",
+      "type": "Buy",
+      "qty": 1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 541265127,
+      "date": "Thu Sep 03 00:00:00 EDT 2026",
+      "rawDate": "20260903",
+      "type": "Buy",
+      "qty": 1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 45157951,
+      "date": "Thu Sep 03 00:00:00 EDT 2026",
+      "rawDate": "20260903",
+      "type": "Buy",
+      "qty": 1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 15124833,
+      "date": "Thu Sep 03 00:00:00 EDT 2026",
+      "rawDate": "20260903",
+      "type": "Buy",
+      "qty": 1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 45157951,
+      "date": "Thu Sep 03 00:00:00 EDT 2026",
+      "rawDate": "20260903",
+      "type": "Sell",
+      "qty": -1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 115324104,
+      "date": "Thu Sep 03 00:00:00 EDT 2026",
+      "rawDate": "20260903",
+      "type": "Sell",
+      "qty": -1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 15124833,
+      "date": "Thu Sep 03 00:00:00 EDT 2026",
+      "rawDate": "20260903",
+      "type": "Sell",
+      "qty": -1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 76792991,
+      "date": "Fri Sep 04 00:00:00 EDT 2026",
+      "rawDate": "20260904",
+      "type": "Buy",
+      "qty": 1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 541265127,
+      "date": "Fri Sep 04 00:00:00 EDT 2026",
+      "rawDate": "20260904",
+      "type": "Sell",
+      "qty": -1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 29624264,
+      "date": "Tue Sep 08 00:00:00 EDT 2026",
+      "rawDate": "20260908",
+      "type": "Buy",
+      "qty": 1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 29624264,
+      "date": "Tue Sep 08 00:00:00 EDT 2026",
+      "rawDate": "20260908",
+      "type": "Sell",
+      "qty": -1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 76792991,
+      "date": "Tue Sep 08 00:00:00 EDT 2026",
+      "rawDate": "20260908",
+      "type": "Sell",
+      "qty": -1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 4813508,
+      "date": "Tue Sep 08 00:00:00 EDT 2026",
+      "rawDate": "20260908",
+      "type": "Sell",
+      "qty": -1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 4391,
+      "date": "Tue Sep 08 00:00:00 EDT 2026",
+      "rawDate": "20260908",
+      "type": "Sell",
+      "qty": -1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 29624264,
+      "date": "Wed Sep 09 00:00:00 EDT 2026",
+      "rawDate": "20260909",
+      "type": "Buy to Cover",
+      "qty": 1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 29624264,
+      "date": "Wed Sep 09 00:00:00 EDT 2026",
+      "rawDate": "20260909",
+      "type": "Sell",
+      "qty": -1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 29624264,
+      "date": "Wed Sep 09 00:00:00 EDT 2026",
+      "rawDate": "20260909",
+      "type": "Sell Short",
+      "qty": -1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 4391,
+      "date": "Thu Sep 10 00:00:00 EDT 2026",
+      "rawDate": "20260910",
+      "type": "Buy",
+      "qty": 1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 76792991,
+      "date": "Thu Sep 10 00:00:00 EDT 2026",
+      "rawDate": "20260910",
+      "type": "Buy to Cover",
+      "qty": 1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 4391,
+      "date": "Thu Sep 10 00:00:00 EDT 2026",
+      "rawDate": "20260910",
+      "type": "Sell",
+      "qty": -1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 76792991,
+      "date": "Thu Sep 10 00:00:00 EDT 2026",
+      "rawDate": "20260910",
+      "type": "Sell Short",
+      "qty": -1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 899700992,
+      "date": "Fri Sep 11 00:00:00 EDT 2026",
+      "rawDate": "20260911",
+      "type": "Buy",
+      "qty": 1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 899700992,
+      "date": "Mon Sep 14 00:00:00 EDT 2026",
+      "rawDate": "20260914",
+      "type": "Buy",
+      "qty": 1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 899700992,
+      "date": "Wed Sep 16 00:00:00 EDT 2026",
+      "rawDate": "20260916",
+      "type": "Buy",
+      "qty": 1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 899700992,
+      "date": "Wed Sep 16 00:00:00 EDT 2026",
+      "rawDate": "20260916",
+      "type": "Sell",
+      "qty": -1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 547605251,
+      "date": "Thu Sep 17 00:00:00 EDT 2026",
+      "rawDate": "20260917",
+      "type": "Buy",
+      "qty": 1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 383858515,
+      "date": "Thu Sep 17 00:00:00 EDT 2026",
+      "rawDate": "20260917",
+      "type": "Buy",
+      "qty": 1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 70101545,
+      "date": "Thu Sep 17 00:00:00 EDT 2026",
+      "rawDate": "20260917",
+      "type": "Buy",
+      "qty": 1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 4493,
+      "date": "Thu Sep 17 00:00:00 EDT 2026",
+      "rawDate": "20260917",
+      "type": "Buy",
+      "qty": 1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 771759702,
+      "date": "Thu Sep 17 00:00:00 EDT 2026",
+      "rawDate": "20260917",
+      "type": "Buy",
+      "qty": 1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 899700992,
+      "date": "Thu Sep 17 00:00:00 EDT 2026",
+      "rawDate": "20260917",
+      "type": "Sell",
+      "qty": -1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 771759702,
+      "date": "Thu Sep 17 00:00:00 EDT 2026",
+      "rawDate": "20260917",
+      "type": "Sell",
+      "qty": -1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 547605251,
+      "date": "Fri Sep 18 00:00:00 EDT 2026",
+      "rawDate": "20260918",
+      "type": "Buy",
+      "qty": 1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 346218218,
+      "date": "Mon Sep 21 00:00:00 EDT 2026",
+      "rawDate": "20260921",
+      "type": "Buy",
+      "qty": 1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 370757467,
+      "date": "Mon Sep 21 00:00:00 EDT 2026",
+      "rawDate": "20260921",
+      "type": "Buy",
+      "qty": 1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 4391,
+      "date": "Mon Sep 21 00:00:00 EDT 2026",
+      "rawDate": "20260921",
+      "type": "Buy",
+      "qty": 1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 4391,
+      "date": "Mon Sep 21 00:00:00 EDT 2026",
+      "rawDate": "20260921",
+      "type": "Sell",
+      "qty": -1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 134306225,
+      "date": "Tue Sep 22 00:00:00 EDT 2026",
+      "rawDate": "20260922",
+      "type": "Buy",
+      "qty": 1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 771759702,
+      "date": "Tue Sep 22 00:00:00 EDT 2026",
+      "rawDate": "20260922",
+      "type": "Buy",
+      "qty": 1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 346218218,
+      "date": "Tue Sep 22 00:00:00 EDT 2026",
+      "rawDate": "20260922",
+      "type": "Sell",
+      "qty": -1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 899700992,
+      "date": "Tue Sep 22 00:00:00 EDT 2026",
+      "rawDate": "20260922",
+      "type": "Sell",
+      "qty": -1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 383858515,
+      "date": "Wed Sep 23 00:00:00 EDT 2026",
+      "rawDate": "20260923",
+      "type": "Buy",
+      "qty": 1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 88819736,
+      "date": "Wed Sep 23 00:00:00 EDT 2026",
+      "rawDate": "20260923",
+      "type": "Buy",
+      "qty": 1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 771759702,
+      "date": "Wed Sep 23 00:00:00 EDT 2026",
+      "rawDate": "20260923",
+      "type": "Buy",
+      "qty": 1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 134306225,
+      "date": "Wed Sep 23 00:00:00 EDT 2026",
+      "rawDate": "20260923",
+      "type": "Sell",
+      "qty": -1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 547605251,
+      "date": "Wed Sep 23 00:00:00 EDT 2026",
+      "rawDate": "20260923",
+      "type": "Sell",
+      "qty": -1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 383858515,
+      "date": "Wed Sep 23 00:00:00 EDT 2026",
+      "rawDate": "20260923",
+      "type": "Sell",
+      "qty": -1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 370757467,
+      "date": "Wed Sep 23 00:00:00 EDT 2026",
+      "rawDate": "20260923",
+      "type": "Sell",
+      "qty": -1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 70101545,
+      "date": "Wed Sep 23 00:00:00 EDT 2026",
+      "rawDate": "20260923",
+      "type": "Sell",
+      "qty": -1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 4493,
+      "date": "Wed Sep 23 00:00:00 EDT 2026",
+      "rawDate": "20260923",
+      "type": "Sell",
+      "qty": -1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 771759702,
+      "date": "Wed Sep 23 00:00:00 EDT 2026",
+      "rawDate": "20260923",
+      "type": "Sell",
+      "qty": -1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 88819736,
+      "date": "Thu Sep 24 00:00:00 EDT 2026",
+      "rawDate": "20260924",
+      "type": "Sell",
+      "qty": -1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 88819736,
+      "date": "Fri Sep 25 00:00:00 EDT 2026",
+      "rawDate": "20260925",
+      "type": "Buy",
+      "qty": 1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 88819736,
+      "date": "Mon Sep 28 00:00:00 EDT 2026",
+      "rawDate": "20260928",
+      "type": "Buy",
+      "qty": 1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 88819736,
+      "date": "Mon Sep 28 00:00:00 EDT 2026",
+      "rawDate": "20260928",
+      "type": "Sell",
+      "qty": -1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 88819736,
+      "date": "Tue Sep 29 00:00:00 EDT 2026",
+      "rawDate": "20260929",
+      "type": "Buy",
+      "qty": 1.0,
+      "pr": 100.0
+    },
+    {
+      "acctid": "U1",
+      "conid": 88819736,
+      "date": "Tue Sep 29 00:00:00 EDT 2026",
+      "rawDate": "20260929",
+      "type": "Sell",
+      "qty": -1.0,
+      "pr": 100.0
+    }
+  ]
+}
