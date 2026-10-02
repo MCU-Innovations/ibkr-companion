@@ -130,14 +130,32 @@ pub struct Position {
     pub account: String,
     pub conid: i64,
     pub quantity: f64,
+    pub market_value: Option<f64>,
+    pub currency: String,
 }
 
 impl Position {
     pub fn parse(v: &Value) -> Option<Self> {
+        if crate::options::is_option(v) {
+            return None;
+        }
         Some(Self {
             account: v.get("_account")?.as_str()?.to_string(),
             conid: integer(v.get("conid")?)?,
             quantity: number(v.get("position")?)?,
+            market_value: v
+                .get("mktValue")
+                .or_else(|| v.get("marketValue"))
+                .or_else(|| v.get("market_value"))
+                .and_then(number)
+                .map(f64::abs),
+            currency: v
+                .get("currency")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|currency| !currency.is_empty())
+                .unwrap_or("USD")
+                .to_ascii_uppercase(),
         })
     }
 }

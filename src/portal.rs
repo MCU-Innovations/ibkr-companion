@@ -24,6 +24,7 @@ pub struct Portal {
     pub verify_ssl: bool,
     pub allowed_accounts: Vec<String>,
     client: Client,
+    option_conids: Arc<std::sync::Mutex<std::collections::HashSet<i64>>>,
 }
 
 #[derive(Clone, Debug)]
@@ -98,6 +99,7 @@ impl Portal {
             verify_ssl,
             allowed_accounts,
             client,
+            option_conids: Arc::new(std::sync::Mutex::new(std::collections::HashSet::new())),
         })
     }
 
@@ -228,21 +230,25 @@ impl Portal {
                 }
             };
             for mut item in rows {
-                if item
-                    .get("secType")
-                    .or_else(|| item.get("assetClass"))
-                    .and_then(Value::as_str)
-                    == Some("STK")
-                {
+                if is_stock_position(&item) || crate::options::is_option(&item) {
                     item["_account"] = Value::String(account.clone());
-                    if crate::model::Position::parse(&item).is_none() {
+                    if is_stock_position(&item) && crate::model::Position::parse(&item).is_none() {
                         bail!("Client Portal returned an invalid stock position; holdings cannot be established");
                     }
                     all.push(item);
                 }
             }
         }
+        *self.option_conids.lock().unwrap() = all
+            .iter()
+            .filter(|v| crate::options::is_option(v))
+            .filter_map(|v| crate::model::integer(&v["conid"]))
+            .collect();
         Ok(all)
+    }
+
+    fn option_ids(&self) -> std::collections::HashSet<i64> {
+        self.option_conids.lock().unwrap().clone()
     }
 
     pub async fn trades(&self) -> Result<Vec<Value>> {
@@ -251,6 +257,30 @@ impl Portal {
             .as_array()
             .context("Client Portal trades response is invalid")?
             .clone())
+    }
+
+    /// Contract classification comes directly from the authenticated Client
+    /// Portal session; no external instrument-data service is used.
+    pub async fn contract_info(&self, conid: i64) -> Result<Value> {
+        self.get(&format!("iserver/contract/{conid}/info")).await
+    }
+
+    /// Converts a native instrument currency into the account's USD overview
+    /// currency using the authenticated Client Portal session.
+    pub async fn usd_exchange_rate(&self, source: &str) -> Result<f64> {
+        let value = self
+            .get(&format!("iserver/exchangerate?source={source}&target=USD"))
+            .await?;
+        value
+            .get("rate")
+            .and_then(|rate| {
+                rate.as_f64().or_else(|| {
+                    rate.as_str()
+                        .and_then(|text| text.replace(',', "").parse::<f64>().ok())
+                })
+            })
+            .filter(|rate| rate.is_finite() && *rate > 0.0)
+            .context("Client Portal returned an invalid exchange rate")
     }
 
     pub async fn transactions(&self, account: &str, conids: &[i64]) -> Result<Vec<Value>> {
@@ -465,6 +495,7 @@ impl Portal {
                         &mut current,
                         &wanted,
                         crate::market::overnight_subscription_active(Utc::now()),
+                        &self.option_ids(),
                     )
                     .await
                     {
@@ -518,13 +549,13 @@ impl Portal {
                             changed = subscriptions.changed() => {
                                 if changed.is_err() { return; }
                                 let wanted = subscriptions.borrow().clone();
-                                if let Err(error) = sync_subscriptions(&mut writer, &mut current, &wanted, crate::market::overnight_subscription_active(Utc::now())).await {
+                                if let Err(error) = sync_subscriptions(&mut writer, &mut current, &wanted, crate::market::overnight_subscription_active(Utc::now()), &self.option_ids()).await {
                                     crate::diagnostics::warn(format_args!("Market data subscription update failed: {error}")); break;
                                 }
                             }
                             _ = source_timer.tick() => {
                                 let wanted = subscriptions.borrow().clone();
-                                if let Err(error) = sync_subscriptions(&mut writer, &mut current, &wanted, crate::market::overnight_subscription_active(Utc::now())).await {
+                                if let Err(error) = sync_subscriptions(&mut writer, &mut current, &wanted, crate::market::overnight_subscription_active(Utc::now()), &self.option_ids()).await {
                                     crate::diagnostics::warn(format_args!("Market data session switch failed: {error}")); break;
                                 }
                             }
@@ -554,6 +585,32 @@ impl Portal {
             backoff = (backoff * 2).min(30);
         }
     }
+}
+
+/// Portfolio endpoints can surface options alongside stocks. The overview is
+/// intentionally stock-only, so classify conservatively before the values
+/// reach the application state or market-data subscriptions.
+pub(crate) fn is_stock_position(item: &Value) -> bool {
+    let security_types = ["secType", "assetClass", "type", "instrumentType"];
+    let has_stock_type = security_types.iter().any(|name| {
+        item.get(*name)
+            .and_then(Value::as_str)
+            .is_some_and(|value| value.trim().eq_ignore_ascii_case("STK"))
+    });
+    let has_option_type = security_types.iter().any(|name| {
+        item.get(*name)
+            .and_then(Value::as_str)
+            .is_some_and(|value| {
+                matches!(
+                    value.trim().to_ascii_uppercase().as_str(),
+                    "OPT" | "FOP" | "WAR"
+                )
+            })
+    });
+    let has_option_fields = ["putOrCall", "right", "strike", "expiry", "expirationDate"]
+        .iter()
+        .any(|name| item.get(*name).is_some_and(|value| !value.is_null()));
+    has_stock_type && !has_option_type && !has_option_fields
 }
 
 fn gateway_client(verify_ssl: bool) -> Result<Client> {
@@ -600,7 +657,7 @@ fn subscription_message(target: &str) -> Message {
     let fields = if target.ends_with("@OVERNIGHT") {
         "[\"31\",\"6509\"]"
     } else {
-        "[\"31\",\"6509\",\"7296\",\"7741\"]"
+        "[\"31\",\"83\",\"6457\",\"6509\",\"7295\",\"7296\",\"7741\",\"84\",\"86\",\"87\",\"7308\",\"7309\",\"7310\",\"7311\",\"7633\",\"7635\",\"7638\"]"
     };
     Message::Text(format!("smd+{target}+{{\"fields\":{fields}}}").into())
 }
@@ -610,6 +667,7 @@ async fn sync_subscriptions<S>(
     current: &mut Vec<String>,
     wanted: &[i64],
     overnight: bool,
+    option_ids: &std::collections::HashSet<i64>,
 ) -> Result<()>
 where
     S: futures_util::Sink<Message> + Unpin,
@@ -621,7 +679,7 @@ where
         .chain(
             wanted
                 .iter()
-                .filter(|_| overnight)
+                .filter(|conid| overnight && !option_ids.contains(conid))
                 .map(|conid| format!("{conid}@OVERNIGHT")),
         )
         .collect();
@@ -690,6 +748,20 @@ impl ServerCertVerifier for LoopbackCertVerifier {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn stock_filter_rejects_option_rows_even_with_stock_asset_class() {
+        assert!(super::is_stock_position(&serde_json::json!({
+            "secType": "STK", "ticker": "AAPL", "position": 10
+        })));
+        assert!(!super::is_stock_position(&serde_json::json!({
+            "assetClass": "STK", "type": "OPT", "putOrCall": "C",
+            "strike": 250, "ticker": "AAPL", "position": 1
+        })));
+        assert!(!super::is_stock_position(&serde_json::json!({
+            "secType": "OPT", "ticker": "AAPL", "position": 1
+        })));
+    }
+
     #[test]
     fn stream_accepts_gateway_binary_json_and_text_json() {
         let payload =
@@ -779,6 +851,7 @@ mod tests {
             verify_ssl: false,
             allowed_accounts: Vec::new(),
             client,
+            option_conids: Arc::new(std::sync::Mutex::new(std::collections::HashSet::new())),
         };
         let error = portal.get("portfolio/accounts").await.unwrap_err();
         assert!(error

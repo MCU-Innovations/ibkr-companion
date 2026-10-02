@@ -1,0 +1,73 @@
+// SettingCardGroup - the named container that holds a
+// stack of SettingCard / SettingRow cards.
+//
+// Mirrors qfluentwidgets ``SettingCardGroup``
+// (``qfluentwidgets/components/settings/
+// setting_card_group.py``):
+//
+//   * group title at the top in 20px / weight 600;
+//   * 12px vertical gap between the title and the first
+//     card;
+//   * 2px vertical gap between cards so the underlying
+//     surface shows through as a hairline divider - same
+//     trick qfluentwidgets uses to visually separate
+//     adjacent SettingCards without drawing a real line;
+//   * the cards themselves fill the group width and the
+//     group stretches vertically to fit them.
+//
+// Usage in a SettingsPage body:
+//
+//   SettingCardGroup {
+//       title: "Personalization";
+//
+//       SwitchSettingCard { ... }
+//       OptionsSettingCard { ... }
+//   }
+//
+// Width / height are not pinned; the page body ScrollView
+// (in ``PageCard``) gives the column whatever width it
+// has and the group expands vertically to fit its cards.
+
+import { MaterialPalette } from "@material";
+import { MaterialText } from "@material";
+
+export component SettingCardGroup inherits VerticalLayout {
+    in property <string> title: "";
+
+    spacing: 0px;
+    alignment: start;
+
+    // ---- Group title ------------------------------------
+    // 20px / weight 600 matches qfluentwidgets' group
+    // title styling (``setFont(self.titleLabel, 20)``).
+    // ``on_surface`` keeps it readable on the brand
+    // background and on the surface_container card
+    // underneath.
+    MaterialText {
+        text: root.title;
+        color: MaterialPalette.on_surface;
+        style: { font_size: 20px, font_weight: 600 };
+    }
+
+    // ---- 12px gap between title and first card ---------
+    // qfluentwidgets uses ``addSpacing(12)`` between the
+    // title and the card layout.  Implemented as an empty
+    // Rectangle with a fixed height so it doesn't fight
+    // the VerticalLayout's ``spacing`` (which would
+    // interleave every child, including the cards).
+    Rectangle {
+        height: 12px;
+    }
+
+    // ---- Card stack -------------------------------------
+    // 2px gap between cards.  SettingCardGroup pages
+    // supply the cards via @children.  Cards themselves
+    // keep their rounded corners and the 2px gap reveals
+    // the body surface beneath as a thin separator.
+    VerticalLayout {
+        spacing: 2px;
+        width: 100%;
+
+        @children
+    }
+}

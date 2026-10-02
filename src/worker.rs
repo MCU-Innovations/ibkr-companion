@@ -10,13 +10,21 @@ use std::path::PathBuf;
 use std::time::Duration;
 use tokio::sync::{mpsc, watch};
 
-#[derive(Debug)]
 pub enum Command {
+    FundamentalsDemand(bool),
+    BackendSave {
+        provider: i32,
+        enabled: bool,
+        key: String,
+        clear_key: bool,
+    },
+    FundamentalsRefresh,
     Refresh,
     Select(String),
     Filter(String),
     Period(String),
     Sort(String),
+    OptionSort(String),
     Target(String, String),
     Alert(bool),
     Pin,
@@ -33,6 +41,8 @@ pub struct RowView {
     pub price: String,
     pub move_text: String,
     pub move_tone: i32,
+    pub open_trend: String,
+    pub open_trend_tone: i32,
     pub target: String,
     pub best_buy: String,
     pub best_buy_highlight: bool,
@@ -64,8 +74,38 @@ pub struct ChartData {
     pub last_time: String,
 }
 
+#[derive(Clone, Debug, Default)]
+pub struct SectorSliceView {
+    pub label: String,
+    pub amount: String,
+    pub start: f32,
+    pub fraction: f32,
+    pub palette: i32,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct HoldingTileView {
+    pub sector: String,
+    pub portfolio_weight: f32,
+    pub market_cap: f32,
+    pub market_cap_label: String,
+    pub market_cap_stale: bool,
+    pub symbol: String,
+    pub classification: String,
+    pub value: String,
+    pub change: String,
+    pub change_tone: i32,
+}
+
 #[derive(Clone, Debug)]
 pub struct View {
+    pub premium_rows: Vec<crate::PremiumRow>,
+    pub premium_total: String,
+    pub options: Vec<crate::options::OptionView>,
+    pub options_status: String,
+    pub options_pnl: String,
+    pub option_sort_column: String,
+    pub option_sort_ascending: bool,
     pub rows: Vec<RowView>,
     pub status: String,
     pub count: String,
@@ -80,10 +120,16 @@ pub struct View {
     pub alert_text: String,
     pub sort_column: String,
     pub sort_ascending: bool,
+    pub fundamentals_status: String,
+    pub portfolio_total: String,
+    pub portfolio_count: String,
+    pub sector_slices: Vec<SectorSliceView>,
+    pub holding_tiles: Vec<HoldingTileView>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum SortColumn {
+    SinceOpen,
     Symbol,
     Date,
     Exit,
@@ -101,6 +147,7 @@ impl SortColumn {
             "date" => Self::Date,
             "exit" => Self::Exit,
             "market" => Self::Market,
+            "since_open" => Self::SinceOpen,
             "delta" => Self::Delta,
             "target" => Self::Target,
             "best_buy" => Self::BestBuy,
@@ -115,6 +162,7 @@ impl SortColumn {
             Self::Date => "date",
             Self::Exit => "exit",
             Self::Market => "market",
+            Self::SinceOpen => "since_open",
             Self::Delta => "delta",
             Self::Target => "target",
             Self::BestBuy => "best_buy",
@@ -123,7 +171,7 @@ impl SortColumn {
     }
 
     fn first_ascending(self) -> bool {
-        matches!(self, Self::Symbol | Self::Delta)
+        matches!(self, Self::Symbol)
     }
 }
 
@@ -132,6 +180,15 @@ enum NetworkEvent {
     History(String, anyhow::Result<Vec<Candle>>),
     Close(i64, NaiveDate, anyhow::Result<Option<(NaiveDate, f64)>>),
     CostHistory(Vec<String>, anyhow::Result<HashMap<String, Vec<Execution>>>),
+    ContractInfo(i64, anyhow::Result<Value>),
+    ExchangeRate(String, anyhow::Result<f64>),
+}
+
+#[derive(Clone, Debug, Default)]
+struct HoldingMetadata {
+    symbol: String,
+    sector: String,
+    industry: String,
 }
 
 struct HistoricalClose {
@@ -143,11 +200,30 @@ struct HistoricalClose {
 struct State {
     accounts: Vec<String>,
     executions: HashMap<String, Execution>,
+    premium_sales: HashMap<String, crate::options::PremiumSale>,
     cost_history: HashMap<String, Vec<Execution>>,
     cost_estimates: HashMap<String, (Option<f64>, Option<f64>)>,
     cost_pending: HashSet<String>,
     cost_attempts: HashMap<String, i64>,
     positions: Vec<Position>,
+    stock_position_data: Vec<Value>,
+    option_positions: Vec<Value>,
+    option_sort_column: String,
+    option_sort_ascending: bool,
+    option_info: HashMap<i64, Value>,
+    option_ticks: HashMap<i64, Value>,
+    holding_metadata: HashMap<i64, HoldingMetadata>,
+    metadata_pending: HashSet<i64>,
+    metadata_attempts: HashMap<i64, i64>,
+    daily_changes: HashMap<i64, f64>,
+    opening_prices: HashMap<i64, (NaiveDate, f64)>,
+    market_caps: HashMap<String, f64>,
+    fundamentals: HashMap<String, crate::fundamentals::Profile>,
+    fundamentals_active: bool,
+    fundamentals_status: String,
+    usd_exchange_rates: HashMap<String, f64>,
+    exchange_rate_pending: HashSet<String>,
+    exchange_rate_attempts: HashMap<String, i64>,
     history_contracts: HashMap<String, (String, i64, String)>,
     quotes: HashMap<i64, Quote>,
     overnight_quotes: HashMap<i64, Quote>,
@@ -178,11 +254,30 @@ impl Default for State {
         Self {
             accounts: Vec::new(),
             executions: HashMap::new(),
+            premium_sales: HashMap::new(),
             cost_history: HashMap::new(),
             cost_estimates: HashMap::new(),
             cost_pending: HashSet::new(),
             cost_attempts: HashMap::new(),
             positions: Vec::new(),
+            stock_position_data: Vec::new(),
+            option_positions: Vec::new(),
+            option_sort_column: "expiry".into(),
+            option_sort_ascending: true,
+            option_info: HashMap::new(),
+            option_ticks: HashMap::new(),
+            holding_metadata: HashMap::new(),
+            metadata_pending: HashSet::new(),
+            metadata_attempts: HashMap::new(),
+            daily_changes: HashMap::new(),
+            opening_prices: HashMap::new(),
+            market_caps: HashMap::new(),
+            fundamentals: HashMap::new(),
+            fundamentals_active: false,
+            fundamentals_status: "Yahoo Finance ready - no API key required".into(),
+            usd_exchange_rates: HashMap::new(),
+            exchange_rate_pending: HashSet::new(),
+            exchange_rate_attempts: HashMap::new(),
             history_contracts: HashMap::new(),
             quotes: HashMap::new(),
             overnight_quotes: HashMap::new(),
@@ -196,7 +291,9 @@ impl Default for State {
             filter: "All exits".into(),
             period: "Inception".into(),
             sort_column: Some(SortColumn::Delta),
-            sort_ascending: true,
+            // `delta` is the percent the market is below the exit price.
+            // Put the largest drawdowns at the top by default.
+            sort_ascending: false,
             status: "Connecting to Client Portal…".into(),
             alert_text: String::new(),
             charts: HashMap::new(),
@@ -272,6 +369,197 @@ fn start_refresh(portal: &Portal, tx: &mpsc::Sender<NetworkEvent>, state: &mut S
         .await;
         let _ = tx.send(NetworkEvent::Snapshot(result)).await;
     });
+}
+
+fn metadata_text(value: &Value, names: &[&str]) -> String {
+    names
+        .iter()
+        .find_map(|name| value.get(*name).and_then(Value::as_str))
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+        .unwrap_or_default()
+        .to_string()
+}
+
+fn holding_metadata(value: &Value) -> HoldingMetadata {
+    HoldingMetadata {
+        symbol: metadata_text(value, &["ticker", "symbol", "contractDesc", "description"])
+            .to_ascii_uppercase(),
+        sector: metadata_text(value, &["sector", "sectorName", "group"]),
+        industry: metadata_text(value, &["industry", "industryName", "category"]),
+    }
+}
+
+fn merge_holding_metadata(state: &mut State, conid: i64, incoming: HoldingMetadata) {
+    let metadata = state.holding_metadata.entry(conid).or_default();
+    if !incoming.symbol.is_empty() {
+        metadata.symbol = incoming.symbol;
+    }
+    if !incoming.sector.is_empty() {
+        metadata.sector = incoming.sector;
+    }
+    if !incoming.industry.is_empty() {
+        metadata.industry = incoming.industry;
+    }
+}
+
+fn start_holding_metadata_refresh(
+    portal: &Portal,
+    tx: &mpsc::Sender<NetworkEvent>,
+    state: &mut State,
+) {
+    let now_ms = Utc::now().timestamp_millis();
+    let conids: HashSet<i64> = state
+        .positions
+        .iter()
+        .filter(|position| position.quantity.abs() > 1e-7)
+        .map(|position| position.conid)
+        .chain(
+            state
+                .option_positions
+                .iter()
+                .filter_map(|v| crate::model::integer(&v["conid"])),
+        )
+        .chain(state.premium_sales.values().map(|sale| sale.conid))
+        .collect();
+    for conid in conids {
+        if state.option_info.contains_key(&conid)
+            || state.metadata_pending.contains(&conid)
+            || state.holding_metadata.get(&conid).is_some_and(|metadata| {
+                !metadata.sector.is_empty() || !metadata.industry.is_empty()
+            })
+            || state
+                .metadata_attempts
+                .get(&conid)
+                .is_some_and(|attempt| now_ms - *attempt < 5 * 60_000)
+        {
+            continue;
+        }
+        state.metadata_pending.insert(conid);
+        state.metadata_attempts.insert(conid, now_ms);
+        let portal = portal.clone();
+        let tx = tx.clone();
+        tokio::spawn(async move {
+            let result = portal.contract_info(conid).await;
+            let _ = tx.send(NetworkEvent::ContractInfo(conid, result)).await;
+        });
+    }
+}
+
+fn start_exchange_rate_refresh(
+    portal: &Portal,
+    tx: &mpsc::Sender<NetworkEvent>,
+    state: &mut State,
+) {
+    let now_ms = Utc::now().timestamp_millis();
+    let currencies: HashSet<String> = state
+        .positions
+        .iter()
+        .filter(|position| position.quantity.abs() > 1e-7 && position.currency != "USD")
+        .map(|position| position.currency.clone())
+        .collect();
+    let currencies: HashSet<_> = currencies
+        .into_iter()
+        .chain(
+            state
+                .fundamentals
+                .values()
+                .map(|profile| profile.currency.clone())
+                .filter(|currency| !currency.is_empty() && currency != "USD"),
+        )
+        .collect();
+    for currency in currencies {
+        if state.exchange_rate_pending.contains(&currency)
+            || state
+                .exchange_rate_attempts
+                .get(&currency)
+                .is_some_and(|attempt| now_ms - *attempt < 5 * 60_000)
+        {
+            continue;
+        }
+        state.exchange_rate_pending.insert(currency.clone());
+        state
+            .exchange_rate_attempts
+            .insert(currency.clone(), now_ms);
+        let portal = portal.clone();
+        let tx = tx.clone();
+        tokio::spawn(async move {
+            let result = portal.usd_exchange_rate(&currency).await;
+            let _ = tx.send(NetworkEvent::ExchangeRate(currency, result)).await;
+        });
+    }
+}
+
+fn option_underlying(state: &State, position: &Value) -> Option<i64> {
+    crate::options::underlying_conid(position).or_else(|| {
+        let conid = crate::model::integer(&position["conid"])?;
+        state
+            .option_info
+            .get(&conid)
+            .and_then(crate::options::underlying_conid)
+            .or_else(|| {
+                state
+                    .option_ticks
+                    .get(&conid)
+                    .and_then(crate::options::underlying_conid)
+            })
+    })
+}
+
+fn subscription_ids(state: &State) -> Vec<i64> {
+    observed_sales(state)
+        .into_iter()
+        .map(|sale| sale.conid)
+        .chain(
+            state
+                .positions
+                .iter()
+                .filter(|position| position.quantity.abs() > 1e-7)
+                .map(|position| position.conid),
+        )
+        .chain(
+            state
+                .option_positions
+                .iter()
+                .filter(|v| v["position"].as_f64().unwrap_or(1.0).abs() > 1e-7)
+                .filter_map(|v| crate::model::integer(&v["conid"])),
+        )
+        .chain(
+            state
+                .option_positions
+                .iter()
+                .filter_map(|p| option_underlying(state, p)),
+        )
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect()
+}
+
+fn daily_change_percent(value: &Value) -> Option<f64> {
+    value
+        .get("83")
+        .and_then(|value| {
+            value.as_f64().or_else(|| {
+                value.as_str().and_then(|text| {
+                    text.trim()
+                        .trim_end_matches('%')
+                        .replace(',', "")
+                        .parse()
+                        .ok()
+                })
+            })
+        })
+        .filter(|value: &f64| value.is_finite())
+}
+
+fn since_open(state: &State, conid: i64, now: chrono::DateTime<Utc>) -> Option<f64> {
+    let eastern = market::eastern_time(now);
+    if eastern.time() < chrono::NaiveTime::from_hms_opt(9, 30, 0)? { return None; }
+    let (date, open) = state.opening_prices.get(&conid)?;
+    let quote = state.quotes.get(&conid)?;
+    let updated = chrono::DateTime::from_timestamp_millis(quote.updated_ms)?;
+    if *date != eastern.date_naive() || market::eastern_date(updated) != *date || quote.previous_close { return None; }
+    Some((quote.price / open - 1.0) * 100.0)
 }
 
 fn start_close_refresh(portal: &Portal, tx: &mpsc::Sender<NetworkEvent>, state: &mut State) {
@@ -449,6 +737,20 @@ fn ingest_trades(state: &mut State, rows: &[Value]) -> bool {
     let mut changed = false;
     let allowed: HashSet<&str> = state.accounts.iter().map(String::as_str).collect();
     for row in rows {
+        if let Some(sale) = crate::options::PremiumSale::parse(row) {
+            if allowed.contains(sale.account.as_str()) {
+                if let Some(old) = state.premium_sales.get_mut(&sale.id) {
+                    if old.order_id.is_none() && sale.order_id.is_some() {
+                        old.order_id = sale.order_id.clone();
+                        changed = true;
+                    }
+                }
+            }
+            if allowed.contains(sale.account.as_str()) && !state.premium_sales.contains_key(&sale.id) {
+                state.premium_sales.insert(sale.id.clone(), sale);
+                changed = true;
+            }
+        }
         if let Some(fill) = Execution::parse(row) {
             if !allowed.is_empty() && !allowed.contains(fill.account.as_str()) {
                 continue;
@@ -758,6 +1060,11 @@ fn sort_sales(sales: &mut [Sale], state: &State, now: chrono::DateTime<Utc>) {
         };
         let ascending = state.sort_ascending;
         let result = match column {
+            SortColumn::SinceOpen => compare_price_option(
+                since_open(state, left.conid, now),
+                since_open(state, right.conid, now),
+                ascending,
+            ),
             SortColumn::Symbol => {
                 let result = left.symbol.cmp(&right.symbol);
                 if ascending {
@@ -894,6 +1201,176 @@ fn view(state: &State) -> View {
     view_at(state, Utc::now())
 }
 
+fn portfolio_data(
+    state: &State,
+    now: chrono::DateTime<Utc>,
+) -> (String, String, Vec<SectorSliceView>, Vec<HoldingTileView>) {
+    let mut groups: HashMap<String, f64> = HashMap::new();
+    let mut tiles = Vec::new();
+    let mut total = 0.0;
+    let mut awaiting_fx = 0usize;
+    for position in state
+        .positions
+        .iter()
+        .filter(|position| position.quantity.abs() > 1e-7)
+    {
+        let metadata = state.holding_metadata.get(&position.conid);
+        let symbol = metadata
+            .map(|metadata| metadata.symbol.clone())
+            .filter(|symbol| !symbol.is_empty())
+            .or_else(|| {
+                state
+                    .history_contracts
+                    .values()
+                    .find(|(_, conid, _)| *conid == position.conid)
+                    .map(|(_, _, symbol)| symbol.clone())
+            })
+            .unwrap_or_else(|| format!("#{:}", position.conid));
+        let profile = state.fundamentals.get(&symbol);
+        let sector = profile
+            .map(|p| p.sector.as_str())
+            .filter(|sector| !sector.is_empty())
+            .or_else(|| {
+                metadata
+                    .map(|metadata| metadata.sector.as_str())
+                    .filter(|sector| !sector.is_empty())
+            })
+            .unwrap_or("Unclassified");
+        let industry = profile
+            .map(|p| p.industry.as_str())
+            .filter(|industry| !industry.is_empty())
+            .or_else(|| {
+                metadata
+                    .map(|metadata| metadata.industry.as_str())
+                    .filter(|industry| !industry.is_empty())
+            });
+        let classification = industry
+            .map(|industry| format!("{sector} / {industry}"))
+            .unwrap_or_else(|| sector.to_string());
+        let native_value = position.market_value.or_else(|| {
+            display_price(state, position.conid, now)
+                .map(|quote| quote.price * position.quantity.abs())
+        });
+        let usd_value = native_value
+            .filter(|value| value.is_finite() && *value > 0.0)
+            .and_then(|value| {
+                if position.currency == "USD" {
+                    Some(value)
+                } else {
+                    state
+                        .usd_exchange_rates
+                        .get(&position.currency)
+                        .map(|rate| value * rate)
+                }
+            });
+        if let Some(value) = usd_value {
+            total += value;
+            *groups.entry(sector.to_string()).or_default() += value;
+        } else if native_value.is_some() && position.currency != "USD" {
+            awaiting_fx += 1;
+        }
+        let change = state.daily_changes.get(&position.conid).copied();
+        let provider_cap = profile.and_then(|profile| {
+            profile.market_cap.and_then(|cap| {
+                if profile.currency == "USD" {
+                    Some(cap)
+                } else {
+                    state
+                        .usd_exchange_rates
+                        .get(&profile.currency)
+                        .map(|rate| cap * rate)
+                }
+            })
+        });
+        let cap = provider_cap.or_else(|| state.market_caps.get(&symbol).copied());
+        let stale = provider_cap.is_some()
+            && profile.is_some_and(|profile| !profile.fresh(now.timestamp_millis()));
+        let cap_label = cap
+            .map(|cap| {
+                let amount = if cap >= 1e12 {
+                    format!("${:.2}T", cap / 1e12)
+                } else if cap >= 1e9 {
+                    format!("${:.2}B", cap / 1e9)
+                } else if cap >= 1e6 {
+                    format!("${:.2}M", cap / 1e6)
+                } else {
+                    format!("${cap:.0}")
+                };
+                format!("{amount} cap{}", if stale { " (stale cache)" } else { "" })
+            })
+            .unwrap_or_else(|| "Market cap unavailable".into());
+        tiles.push(HoldingTileView {
+            sector: sector.to_string(),
+            portfolio_weight: usd_value.unwrap_or(0.0) as f32,
+            market_cap: cap.unwrap_or(0.0) as f32,
+            market_cap_label: cap_label,
+            market_cap_stale: stale,
+            symbol,
+            classification,
+            value: match (native_value, usd_value) {
+                (Some(native), Some(usd)) if position.currency != "USD" => {
+                    format!("{} {native:.0} = ${usd:.0}", position.currency)
+                }
+                (Some(_), Some(usd)) => format!("${usd:.0}"),
+                (Some(native), None) => {
+                    format!("{} {native:.0} · waiting for FX", position.currency)
+                }
+                (None, _) => "Waiting for quote".into(),
+            },
+            change: change
+                .map(|change| format!("{change:+.2}%"))
+                .unwrap_or_else(|| "--".into()),
+            change_tone: change.map_or(0, |change| {
+                if change > 0.0 {
+                    1
+                } else if change < 0.0 {
+                    -1
+                } else {
+                    0
+                }
+            }),
+        });
+    }
+    tiles.sort_by(|left, right| left.symbol.cmp(&right.symbol));
+    let mut grouped: Vec<_> = groups.into_iter().collect();
+    grouped.sort_by(|left, right| right.1.total_cmp(&left.1));
+    let mut start = 0.0_f32;
+    let sectors = grouped
+        .into_iter()
+        .enumerate()
+        .map(|(index, (label, value))| {
+            let fraction = if total > 0.0 {
+                (value / total) as f32
+            } else {
+                0.0
+            };
+            let slice = SectorSliceView {
+                label,
+                amount: format!("${value:.0}"),
+                start,
+                fraction,
+                palette: (index % 8) as i32,
+            };
+            start += fraction;
+            slice
+        })
+        .collect();
+    (
+        if total > 0.0 {
+            format!("${total:.0}")
+        } else {
+            "Waiting for market values".into()
+        },
+        if awaiting_fx == 0 {
+            format!("{} held stocks", tiles.len())
+        } else {
+            format!("{} held stocks · {awaiting_fx} awaiting FX", tiles.len())
+        },
+        sectors,
+        tiles,
+    )
+}
+
 fn view_at(state: &State, now: chrono::DateTime<Utc>) -> View {
     let mut sales = observed_sales(state);
     sort_sales(&mut sales, state, now);
@@ -951,6 +1428,11 @@ fn view_at(state: &State, now: chrono::DateTime<Utc>) -> View {
                     .map(|v| format!("{v:.2}"))
                     .unwrap_or_else(|| "—".into());
                 RowView {
+                    open_trend: since_open(state, sale.conid, now).map(|n| {
+                        let rounded = (n * 100.0).round() / 100.0;
+                        format!("{} {rounded:+.2}%", if rounded > 0.0 { "↑" } else if rounded < 0.0 { "↓" } else { "→" })
+                    }).unwrap_or_else(|| "—".into()),
+                    open_trend_tone: since_open(state, sale.conid, now).map_or(0, |n| if n >= 0.005 { 1 } else if n <= -0.005 { -1 } else { 0 }),
                     key: sale.key.clone(),
                     symbol: sale.symbol.clone(),
                     date: if state.executions.values().any(|f| {
@@ -1009,7 +1491,86 @@ fn view_at(state: &State, now: chrono::DateTime<Utc>) -> View {
             text
         })
         .unwrap_or_else(|| "Select a stock to inspect its exit and set a target.".into());
+    let (portfolio_total, portfolio_count, sector_slices, holding_tiles) =
+        portfolio_data(state, now);
+    let mut options: Vec<_> = state
+        .option_positions
+        .iter()
+        .filter_map(|p| {
+            let conid = crate::model::integer(&p["conid"])?;
+            let underlying = option_underlying(state, p);
+            let mut position = p.clone();
+            if let Some(cost) = underlying.and_then(|id| crate::options::share_cost(
+                &state.stock_position_data, p["_account"].as_str().unwrap_or(""), id,
+                p["currency"].as_str().unwrap_or(""),
+            )) {
+                position["_shareCost"] = serde_json::json!(cost);
+            }
+            let quote = underlying.and_then(|id| {
+                market::live_quote(now, state.quotes.get(&id), state.overnight_quotes.get(&id))
+                    .map(|(q, _)| q)
+                    .or_else(|| state.quotes.get(&id))
+            });
+            if let Some(quote) = quote {
+                position["_underlyingPrice"] = serde_json::json!(quote.price);
+                let age = now.timestamp_millis() - quote.updated_ms;
+                let status = if age > 90_000 {
+                    "last known"
+                } else if quote.previous_close {
+                    "close/halted"
+                } else if quote.label.contains("frozen") {
+                    "frozen"
+                } else if quote.label.contains("delayed") {
+                    "delayed"
+                } else if quote.real_time {
+                    "real-time"
+                } else {
+                    "unverified"
+                };
+                position["_underlyingStatus"] = serde_json::json!(status);
+            }
+            crate::options::row(
+                &position,
+                state.option_info.get(&conid),
+                state.option_ticks.get(&conid),
+                market::eastern_time(now).date_naive(),
+            )
+        })
+        .collect();
+    crate::options::sort(
+        &mut options,
+        &state.option_sort_column,
+        state.option_sort_ascending,
+    );
+    let options_pnl = crate::options::pnl_summary(&options);
+    let options_status = if !state.positions_loaded {
+        "Waiting for Client Portal positions".into()
+    } else if !state.snapshot_ok {
+        format!("Last known positions · {}", state.status)
+    } else {
+        format!(
+            "{} open positions · {} expiring within 7 days",
+            options.len(),
+            options.iter().filter(|o| o.urgent).count()
+        )
+    };
+    let mut premium_sales = state.premium_sales.clone();
+    for sale in premium_sales.values_mut().filter(|s| s.currency == "—") {
+        if let Some(currency) = state.option_positions.iter()
+            .find(|p| p["_account"].as_str() == Some(sale.account.as_str()) && crate::model::integer(&p["conid"]) == Some(sale.conid))
+            .and_then(|p| p["currency"].as_str())
+            .or_else(|| state.option_info.get(&sale.conid).and_then(|p| p["currency"].as_str())) {
+            sale.currency = currency.into();
+        }
+    }
+    let (premium_rows, premium_total) = crate::options::premium_list(&premium_sales, &state.accounts);
     View {
+        premium_rows, premium_total,
+        options_pnl,
+        option_sort_column: state.option_sort_column.clone(),
+        option_sort_ascending: state.option_sort_ascending,
+        options,
+        options_status,
         rows,
         status: state.status.clone(),
         count: format!(
@@ -1055,6 +1616,11 @@ fn view_at(state: &State, now: chrono::DateTime<Utc>) -> View {
         alert_text: state.alert_text.clone(),
         sort_column: state.sort_column.map(SortColumn::id).unwrap_or("").into(),
         sort_ascending: state.sort_ascending,
+        fundamentals_status: state.fundamentals_status.clone(),
+        portfolio_total,
+        portfolio_count,
+        sector_slices,
+        holding_tiles,
     }
 }
 
@@ -1064,9 +1630,32 @@ pub async fn run(
     ui: slint::Weak<crate::AppWindow>,
 ) {
     let mut state = State::default();
+    let cap_path = std::env::var_os("IBKR_MARKET_CAP_FILE")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| settings_path().with_file_name("market-caps.json"));
+    if let Ok(bytes) = tokio::fs::read(&cap_path).await {
+        match serde_json::from_slice::<HashMap<String, f64>>(&bytes) {
+            Ok(caps) => {
+                state.market_caps = caps
+                    .into_iter()
+                    .filter(|(_, cap)| cap.is_finite() && *cap > 0.0 && *cap <= f32::MAX as f64)
+                    .map(|(symbol, cap)| (symbol.trim().to_uppercase(), cap))
+                    .collect()
+            }
+            Err(error) => {
+                crate::diagnostics::warn(format_args!("Invalid market-cap file: {error}"))
+            }
+        }
+    }
     if let Ok(bytes) = tokio::fs::read(settings_path()).await {
         if let Ok(settings) = serde_json::from_slice(&bytes) {
             state.settings = settings;
+        }
+    }
+    if let Ok(bytes) = tokio::fs::read(settings_path().with_file_name("option-premium-sales.json")).await {
+        match serde_json::from_slice(&bytes) {
+            Ok(sales) => state.premium_sales = sales,
+            Err(error) => crate::diagnostics::warn(format_args!("Invalid option premium archive: {error}")),
         }
     }
     if let Ok(bytes) = tokio::fs::read(archive_path()).await {
@@ -1112,6 +1701,15 @@ pub async fn run(
         state.executions.len(),
         state.cost_history.len()
     ));
+    let (fundamentals_tx, fundamentals_commands) = mpsc::unbounded_channel();
+    let (fundamentals_events, mut fundamentals_rx) = mpsc::unbounded_channel();
+    let fundamentals_task = tokio::spawn(crate::fundamentals::run(
+        fundamentals_commands,
+        fundamentals_events,
+        settings_path().with_file_name("backends.dat"),
+    ));
+    let mut last_fundamentals_demand = Vec::new();
+    let mut fundamentals_running = true;
     let (sub_tx, sub_rx) = watch::channel(Vec::<i64>::new());
     let (stream_tx, mut stream_rx) = mpsc::channel::<Value>(256);
     tokio::spawn(portal.clone().stream(sub_rx, stream_tx));
@@ -1120,11 +1718,20 @@ pub async fn run(
     let mut timer = tokio::time::interval(Duration::from_secs(30));
     loop {
         let mut save = false;
+        let mut refresh_fundamentals = false;
         let mut archive_changed = false;
         let mut cost_history_changed = false;
         let mut contracts_changed = false;
         tokio::select! {
             command = commands.recv() => match command {
+                Some(Command::FundamentalsDemand(active)) => state.fundamentals_active = active,
+                Some(Command::BackendSave { provider, enabled, key, clear_key }) => {
+                    let _ = fundamentals_tx.send(crate::fundamentals::Command::Save {
+                        provider: if provider == 1 { crate::backend_settings::Provider::Fmp } else { crate::backend_settings::Provider::Yahoo },
+                        enabled, replacement_key: if key.trim().is_empty() { None } else { Some(key) }, clear_key,
+                    });
+                }
+                Some(Command::FundamentalsRefresh) => { state.fundamentals_active = true; refresh_fundamentals = true; }
                 Some(Command::Refresh) => {
                     crate::diagnostics::info(format_args!("Manual refresh requested"));
                     start_refresh(&portal, &network_tx, &mut state);
@@ -1139,6 +1746,14 @@ pub async fn run(
                 Some(Command::Filter(value)) => state.filter = value,
                 Some(Command::Period(value)) => state.period = value,
                 Some(Command::Sort(column)) => change_sort(&mut state, &column),
+                Some(Command::OptionSort(column)) => {
+                    if state.option_sort_column == column {
+                        state.option_sort_ascending = !state.option_sort_ascending;
+                    } else {
+                        state.option_sort_ascending = matches!(column.as_str(), "symbol" | "contract" | "expiry" | "dte");
+                        state.option_sort_column = column;
+                    }
+                },
                 Some(Command::Target(mode, text)) => {
                     if !state.selected.is_empty() {
                         let parsed = text.trim().parse::<f64>().ok().filter(|v| v.is_finite() && *v > 0.0 && (mode != "% below exit" || *v < 100.0));
@@ -1168,6 +1783,22 @@ pub async fn run(
                 } }
                 None => break,
             },
+            event = fundamentals_rx.recv(), if fundamentals_running => {
+                match event {
+                    Some(crate::fundamentals::Event::Profile(profile)) => {
+                        state.fundamentals.insert(profile.symbol.clone(), profile);
+                        start_exchange_rate_refresh(&portal, &network_tx, &mut state);
+                    }
+                    Some(crate::fundamentals::Event::Status(status)) => state.fundamentals_status = status,
+                    Some(crate::fundamentals::Event::Reset) => state.fundamentals.clear(),
+                    Some(crate::fundamentals::Event::Settings { provider, enabled, key_set }) => {
+                        let _ = ui.upgrade_in_event_loop(move |ui| {
+                            ui.set_backend_provider(provider); ui.set_backend_enabled(enabled); ui.set_fmp_key_set(key_set);
+                        });
+                    }
+                    None => { fundamentals_running = false; state.fundamentals_status = "Fundamentals worker stopped".into(); }
+                }
+            },
             event = network_rx.recv() => match event {
                 Some(NetworkEvent::Snapshot(result)) => {
                     state.refreshing = false;
@@ -1175,14 +1806,21 @@ pub async fn run(
                         Ok((accounts, positions, trades)) => {
                             state.snapshot_ok = true;
                             crate::diagnostics::info(format_args!(
-                                "Snapshot refreshed: {} accounts, {} stock positions, {} trade records",
+                                "Snapshot refreshed: {} accounts, {} stock/option positions, {} trade records",
                                 accounts.len(), positions.len(), trades.len()
                             ));
                             state.accounts = accounts;
+                            state.option_positions = positions.iter().filter(|v| crate::options::is_option(v)).cloned().collect();
                             state.positions = positions.iter().filter_map(Position::parse).collect();
+                            state.stock_position_data = positions.iter().filter(|p| Position::parse(p).is_some()).cloned().collect();
                             state.positions_loaded = true;
                             for row in &positions {
                                 if let Some(position) = Position::parse(row) {
+                                    merge_holding_metadata(
+                                        &mut state,
+                                        position.conid,
+                                        holding_metadata(row),
+                                    );
                                     if let Some(symbol) = row.get("ticker").or_else(|| row.get("contractDesc"))
                                         .or_else(|| row.get("description")).and_then(Value::as_str) {
                                         state.history_contracts.insert(format!("{}:{}", position.account, position.conid),
@@ -1191,7 +1829,10 @@ pub async fn run(
                                 }
                             }
                             contracts_changed = true;
+                            start_holding_metadata_refresh(&portal, &network_tx, &mut state);
+                            start_exchange_rate_refresh(&portal, &network_tx, &mut state);
                             archive_changed = ingest_trades(&mut state, &trades);
+                            start_holding_metadata_refresh(&portal, &network_tx, &mut state);
                             rebuild_cost_estimates(&mut state);
                             if archive_changed {
                                 crate::diagnostics::info(format_args!(
@@ -1199,8 +1840,7 @@ pub async fn run(
                                     state.executions.len()
                                 ));
                             }
-                            let ids: Vec<i64> = observed_sales(&state).iter().map(|s| s.conid).collect::<HashSet<_>>().into_iter().collect();
-                            let _ = sub_tx.send(ids);
+                            let _ = sub_tx.send(subscription_ids(&state));
                             start_close_refresh(&portal, &network_tx, &mut state);
                             start_cost_refresh(&portal, &network_tx, &mut state);
                             state.status = format!("Client Portal connected · stream {} · {}",
@@ -1249,13 +1889,40 @@ pub async fn run(
                             state.cost_history.extend(history);
                             rebuild_cost_estimates(&mut state);
                             cost_history_changed = true;
-                            let ids = observed_sales(&state).iter().map(|s| s.conid)
-                                .collect::<HashSet<_>>().into_iter().collect();
-                            let _ = sub_tx.send(ids);
+                            let _ = sub_tx.send(subscription_ids(&state));
                             start_close_refresh(&portal, &network_tx, &mut state);
                         }
                         Err(error) => crate::diagnostics::warn(format_args!(
                             "Client Portal transaction history unavailable for {} stocks: {error:#}", keys.len()
+                        )),
+                    }
+                }
+                Some(NetworkEvent::ContractInfo(conid, result)) => {
+                    state.metadata_pending.remove(&conid);
+                    match result {
+                        Ok(value) => {
+                            merge_holding_metadata(&mut state, conid, holding_metadata(&value));
+                            if state.option_positions.iter().any(|p| crate::model::integer(&p["conid"]) == Some(conid)) || state.premium_sales.values().any(|s| s.conid == conid) {
+                                state.option_info.insert(conid, value);
+                                let _ = sub_tx.send(subscription_ids(&state));
+                            }
+                        },
+                        Err(error) => crate::diagnostics::warn(format_args!(
+                            "Client Portal classification lookup failed for {conid}: {error:#}"
+                        )),
+                    }
+                }
+                Some(NetworkEvent::ExchangeRate(currency, result)) => {
+                    state.exchange_rate_pending.remove(&currency);
+                    match result {
+                        Ok(rate) => {
+                            crate::diagnostics::debug(format_args!(
+                                "Client Portal FX rate {currency}/USD: {rate}"
+                            ));
+                            state.usd_exchange_rates.insert(currency, rate);
+                        }
+                        Err(error) => crate::diagnostics::warn(format_args!(
+                            "Client Portal USD conversion unavailable: {error:#}"
                         )),
                     }
                 }
@@ -1282,6 +1949,21 @@ pub async fn run(
                             }
                         } else if topic.starts_with("smd") {
                             if let Some(conid) = value.get("conid").and_then(crate::model::integer) {
+                                if state.option_positions.iter().any(|p| crate::model::integer(&p["conid"]) == Some(conid)) {
+                                    let tick = state.option_ticks.entry(conid).or_insert_with(|| serde_json::json!({}));
+                                    crate::options::merge_ticks(tick, &value);
+                                    if value.get("6457").is_some() { let _ = sub_tx.send(subscription_ids(&state)); }
+                                }
+                                if let Some(change) = daily_change_percent(&value) {
+                                    state.daily_changes.insert(conid, change);
+                                }
+                                if !market::is_overnight_message(&value) {
+                                    if let Some(open) = value.get("7295").and_then(|v| v.as_f64().or_else(|| v.as_str()?.replace(',', "").parse().ok())).filter(|n| n.is_finite() && *n > 0.0) {
+                                        if let Some(at) = value.get("_updated").and_then(Value::as_i64).and_then(chrono::DateTime::from_timestamp_millis) {
+                                            state.opening_prices.insert(conid, (market::eastern_date(at), open));
+                                        }
+                                    }
+                                }
                                 if market::is_overnight_message(&value) {
                                     let previous = state.overnight_quotes.get(&conid);
                                     if let Some((_, quote)) = Quote::parse(&value, previous) {
@@ -1327,6 +2009,10 @@ pub async fn run(
             }
         }
         if archive_changed {
+            if let Err(error) = write_json(settings_path().with_file_name("option-premium-sales.json"), &state.premium_sales).await {
+                crate::diagnostics::error(format_args!("Could not save option premium sales: {error:#}"));
+                state.status = format!("Could not save option premium sales: {error}");
+            }
             if let Err(error) = save_archive(&state.executions).await {
                 crate::diagnostics::error(format_args!("Could not save trade archive: {error:#}"));
                 state.status =
@@ -1341,6 +2027,27 @@ pub async fn run(
             }
         }
         let next = view(&state);
+        let mut demand: Vec<_> = if state.fundamentals_active {
+            next.holding_tiles
+                .iter()
+                .filter(|tile| !tile.symbol.starts_with('#'))
+                .map(|tile| crate::fundamentals::Request {
+                    symbol: tile.symbol.clone(),
+                    ticker: tile.symbol.clone(),
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+        demand.sort_by(|a, b| a.symbol.cmp(&b.symbol));
+        demand.dedup_by(|a, b| a.symbol == b.symbol);
+        if demand != last_fundamentals_demand {
+            let _ = fundamentals_tx.send(crate::fundamentals::Command::Demand(demand.clone()));
+            last_fundamentals_demand = demand;
+        }
+        if refresh_fundamentals {
+            let _ = fundamentals_tx.send(crate::fundamentals::Command::Refresh);
+        }
         if ui
             .upgrade_in_event_loop(move |ui| crate::apply_view(&ui, next))
             .is_err()
@@ -1348,12 +2055,136 @@ pub async fn run(
             break;
         }
     }
+    fundamentals_task.abort();
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn since_open_uses_today_regular_quote_and_rejects_prior_session() {
+        let mut state = State::default();
+        let now = Utc.with_ymd_and_hms(2026, 10, 2, 15, 0, 0).unwrap();
+        state.opening_prices.insert(1, (market::eastern_date(now), 100.0));
+        state.quotes.insert(1, Quote { price:105.0, updated_ms:now.timestamp_millis(),
+            real_time:true, label:"IBKR real-time".into(), previous_close:false });
+        assert!((since_open(&state, 1, now).unwrap() - 5.0).abs() < 1e-9);
+        state.quotes.get_mut(&1).unwrap().price = 95.0;
+        assert!((since_open(&state, 1, now).unwrap() + 5.0).abs() < 1e-9);
+        assert!(since_open(&state, 1, now + chrono::Duration::days(1)).is_none());
+        state.quotes.get_mut(&1).unwrap().previous_close = true;
+        assert!(since_open(&state, 1, now).is_none());
+    }
+    #[test]
+    fn premium_sales_are_archived_once_and_totals_keep_currencies_separate() {
+        let mut state = State::default();
+        state.accounts = vec!["U1".into()];
+        let sale = serde_json::json!({"execution_id":"sale1", "sec_type":"OPT", "side":"S",
+            "account":"U1", "conid":123, "trade_time_r":1790956800000_i64, "size":2,
+            "price":"1.25", "net_amount":250, "currency":"USD", "contract_description_1":"AAPL CALL"});
+        assert!(ingest_trades(&mut state, &[sale.clone()]));
+        assert!(!ingest_trades(&mut state, &[sale.clone()]));
+        assert!(state.executions.is_empty());
+        let (rows, total) = crate::options::premium_list(&state.premium_sales, &state.accounts);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].price, "1.25");
+        assert_eq!(total, "250.00 USD");
+        let mut other = sale.clone();
+        other["execution_id"] = serde_json::json!("sale2");
+        other["currency"] = serde_json::json!("EUR");
+        assert!(ingest_trades(&mut state, &[other.clone()]));
+        assert_eq!(crate::options::premium_list(&state.premium_sales, &state.accounts).1, "250.00 EUR · 250.00 USD");
+        other["execution_id"] = serde_json::json!("buy1"); other["side"] = serde_json::json!("B");
+        assert!(!ingest_trades(&mut state, &[other.clone()]));
+        other["side"] = serde_json::json!("S"); other["account"] = serde_json::json!("U2");
+        assert!(!ingest_trades(&mut state, &[other]));
+        let stored = serde_json::to_vec(&state.premium_sales).unwrap();
+        let restored: HashMap<String, crate::options::PremiumSale> = serde_json::from_slice(&stored).unwrap();
+        assert_eq!(restored.len(), 2);
+    }
     use super::*;
+    #[test]
+    fn subscribes_to_option_underlying_even_without_a_stock_position() {
+        let mut state = State::default();
+        state
+            .option_positions
+            .push(serde_json::json!({"assetClass":"OPT", "conid":10,
+            "_account":"U1", "position":-1, "right":"C", "strike":100}));
+        state
+            .option_info
+            .insert(10, serde_json::json!({"underlying_con_id":20}));
+        let ids = subscription_ids(&state);
+        assert!(ids.contains(&10));
+        assert!(ids.contains(&20));
+        let now = Utc::now();
+        state.quotes.insert(
+            20,
+            Quote {
+                price: 105.0,
+                updated_ms: now.timestamp_millis(),
+                real_time: false,
+                label: "IBKR frozen".into(),
+                previous_close: false,
+            },
+        );
+        let view = view_at(&state, now);
+        assert_eq!(view.options[0].market_price, "105.00");
+        assert_eq!(view.options[0].moneyness, "ITM");
+        assert_eq!(view.options[0].market_status, "frozen");
+        state.option_positions[0]["undConid"] = serde_json::json!(20);
+        state.option_info.clear();
+        assert!(subscription_ids(&state).contains(&20));
+        state.quotes.get_mut(&20).unwrap().price = 99.0;
+        let updated = view_at(&state, now);
+        assert_eq!(updated.options[0].market_price, "99.00");
+        assert_eq!(updated.options[0].moneyness, "OTM");
+        state.option_positions[0].as_object_mut().unwrap().remove("undConid");
+        state.option_info.clear();
+        state
+            .option_ticks
+            .insert(10, serde_json::json!({"6457":"20"}));
+        assert!(subscription_ids(&state).contains(&20));
+        state.quotes.clear();
+        assert_eq!(view_at(&state, now).options[0].moneyness, "—");
+    }
     use chrono::TimeZone;
+
+    #[test]
+    fn yahoo_fundamentals_classify_holdings_and_convert_market_cap_to_usd() {
+        let mut state = State::default();
+        state.positions.push(Position {
+            account: "U1".into(),
+            conid: 77,
+            quantity: 10.0,
+            market_value: Some(100.0),
+            currency: "USD".into(),
+        });
+        state.holding_metadata.insert(
+            77,
+            HoldingMetadata {
+                symbol: "TEST".into(),
+                sector: "".into(),
+                industry: "".into(),
+            },
+        );
+        state.fundamentals.insert(
+            "TEST".into(),
+            crate::fundamentals::Profile {
+                symbol: "TEST".into(),
+                currency: "EUR".into(),
+                market_cap: Some(1_000_000.0),
+                sector: "Technology".into(),
+                industry: "Software".into(),
+                updated_ms: Utc::now().timestamp_millis(),
+            },
+        );
+        let (_, _, sectors, tiles) = portfolio_data(&state, Utc::now());
+        assert_eq!(sectors[0].label, "Technology");
+        assert_eq!(tiles[0].classification, "Technology / Software");
+        assert_eq!(tiles[0].market_cap, 0.0); // Never mix currencies before FX arrives.
+        state.usd_exchange_rates.insert("EUR".into(), 1.1);
+        let (_, _, _, tiles) = portfolio_data(&state, Utc::now());
+        assert_eq!(tiles[0].market_cap, 1_100_000.0);
+    }
 
     #[test]
     fn real_gateway_batch_shape_recovers_all_nineteen_stocks() {
@@ -1461,6 +2292,8 @@ mod tests {
             account: "U1".into(),
             conid: 2,
             quantity: 3.0,
+            market_value: None,
+            currency: "USD".into(),
         });
         for conid in [1, 2] {
             let fill = Execution {
@@ -1573,6 +2406,33 @@ mod tests {
         assert_eq!(observed_sales(&state)[0].average_cost, Some(17.5));
         state.period = "Inception".into();
         assert_eq!(view(&state).rows.len(), 1);
+    }
+
+    #[test]
+    fn portfolio_converts_foreign_market_value_before_aggregation() {
+        let mut state = State::default();
+        state.positions.push(Position {
+            account: "U1".into(),
+            conid: 77,
+            quantity: 10.0,
+            market_value: Some(5_000_000.0),
+            currency: "KRW".into(),
+        });
+        state.usd_exchange_rates.insert("KRW".into(), 0.0007);
+        state.holding_metadata.insert(
+            77,
+            HoldingMetadata {
+                symbol: "KRSTK".into(),
+                sector: "Technology".into(),
+                industry: "Software".into(),
+            },
+        );
+        let (total, count, sectors, tiles) =
+            portfolio_data(&state, Utc.with_ymd_and_hms(2026, 10, 1, 16, 0, 0).unwrap());
+        assert_eq!(total, "$3500");
+        assert_eq!(count, "1 held stocks");
+        assert_eq!(sectors[0].amount, "$3500");
+        assert_eq!(tiles[0].value, "KRW 5000000 = $3500");
     }
 
     #[test]

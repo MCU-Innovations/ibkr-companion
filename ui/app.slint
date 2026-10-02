@@ -1,6 +1,27 @@
-import { Button, CheckBox, ComboBox, ListView } from "std-widgets.slint";
+import { BackendSettingsPage } from "settings/settings_page.slint";
+import { Button, CheckBox, ComboBox, ScrollView } from "std-widgets.slint";
+import {
+    ListView,
+    MaterialPalette,
+    MaterialText,
+    MaterialWindow,
+    TextButton,
+} from "@material";
+
+export struct OptionRow {
+    gamma: string, theta: string, vega: string,
+    share-cost: string,
+    market-price: string, market-status: string, moneyness: string,
+    key: string, symbol: string, contract-short: string, expiry-short: string,
+    dte: string, quantity: string, mark: string, pnl-value: string,
+    pnl-percent: string, delta: string, quote-status: string, pnl-tone: int,
+    contract: string, account: string, expiry: string, position: string,
+    pricing: string, pnl: string, greeks: string, liquidity: string, urgent: bool,
+}
 
 export struct TradeRow {
+    open-trend: string,
+    open-trend-tone: int,
     key: string,
     symbol: string,
     date: string,
@@ -17,6 +38,11 @@ export struct TradeRow {
     selected: bool,
 }
 
+export struct PremiumRow {
+    contract: string, account: string, date: string,
+    quantity: string, price: string, proceeds: string,
+}
+
 export struct CandleBar {
     x: float,
     width: float,
@@ -25,6 +51,37 @@ export struct CandleBar {
     body-top: float,
     body-height: float,
     up: bool,
+}
+
+export struct SectorSlice {
+    label: string,
+    amount: string,
+    start: float,
+    fraction: float,
+    palette: int,
+}
+
+export struct HoldingTile {
+    sector: string,
+    portfolio-weight: float,
+    market-cap: float,
+    market-cap-label: string,
+    market-cap-stale: bool,
+    symbol: string,
+    symbol-length: int,
+    classification: string,
+    value: string,
+    change: string,
+    change-tone: int,
+}
+
+export struct HeatCell {
+    tile: HoldingTile,
+    x: float,
+    y: float,
+    w: float,
+    h: float,
+    header: bool,
 }
 
 component TableCell inherits Rectangle {
@@ -78,40 +135,390 @@ component SortHeader inherits Rectangle {
     header-area := TouchArea { mouse-cursor: pointer; clicked => { root.activated(); } }
 }
 
-component PeriodPill inherits Rectangle {
-    in property <string> label;
-    in property <bool> active;
-    callback activated();
-    width: 100px;
-    height: 32px;
-    border-radius: 16px;
-    border-width: 1px;
-    border-color: active ? #4387ed : #454b55;
-    background: active ? #2269c8 : (area.has-hover ? #343941 : #22252a);
+// This follows ECU Workbench's shell pattern: a Material surface owns the
+// app bar and a temporary navigation drawer is opened by the burger grip.
+component BurgerGrip inherits Rectangle {
+    callback clicked();
+    width: 48px;
+    height: 48px;
+    border-radius: 0px;
+    background: grip.has-hover ? MaterialPalette.surface_container_high : transparent;
     accessible-role: button;
-    accessible-label: label;
-    Text { text: label; color: active ? #ffffff : #bdc5cf; font-size: 12px;
-        font-weight: active ? 700 : 400; horizontal-alignment: center; vertical-alignment: center; }
-    area := TouchArea { mouse-cursor: pointer; clicked => { root.activated(); } }
+    accessible-label: "Open navigation";
+    grip := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+    for y in [16px, 23px, 30px] : Rectangle {
+        x: 14px;
+        y: y;
+        width: 20px;
+        height: 2px;
+        border-radius: 1px;
+        background: MaterialPalette.on_surface;
+    }
 }
 
-export component AppWindow inherits Window {
+// The IBKR desktop products use red for the primary action and selection
+// state. These keep the Material sizing while applying that brand accent.
+component IbkrButton inherits Rectangle {
+    in property <string> text;
+    callback clicked();
+    min-width: 92px;
+    min-height: 40px;
+    border-radius: self.height / 2;
+    background: button-area.has-hover ? #ef2948 : #d70f36;
+    accessible-role: button;
+    accessible-label: root.text;
+    button-area := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+    Text {
+        width: 100%; height: 100%;
+        text: root.text;
+        color: #ffffff;
+        font-size: 13px;
+        font-weight: 650;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+component IbkrFilterChip inherits Rectangle {
+    in property <string> text;
+    in property <bool> checked;
+    callback clicked();
+    border-radius: self.height / 2;
+    border-width: checked ? 0px : 1px;
+    border-color: #5d626c;
+    background: checked ? #a80d2b : chip-area.has-hover ? #292d34 : transparent;
+    accessible-role: button;
+    accessible-label: root.text;
+    chip-area := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+    Text {
+        x: 12px; width: parent.width - 24px; height: parent.height;
+        text: (root.checked ? "*  " : "") + root.text;
+        color: root.checked ? #ffffff : #d7dce3;
+        font-size: 13px;
+        font-weight: root.checked ? 650 : 500;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+}
+
+component PortfolioPieSlice inherits Path {
+    in property <float> start;
+    in property <float> fraction;
+    in property <int> palette;
+    viewbox-width: 100;
+    viewbox-height: 100;
+    fill: root.palette == 0 ? #d70f36
+        : root.palette == 1 ? #e79b27
+        : root.palette == 2 ? #148c69
+        : root.palette == 3 ? #3f87d7
+        : root.palette == 4 ? #9b5cbd
+        : root.palette == 5 ? #d4547b
+        : root.palette == 6 ? #4aa4a1
+        : #7d8796;
+    MoveTo { x: 50; y: 50; }
+    LineTo {
+        y: 50 - 50 * cos(-root.start * 360deg);
+        x: 50 - 50 * sin(-root.start * 360deg);
+    }
+    ArcTo {
+        radius-x: 50;
+        radius-y: 50;
+        y: 50 - 50 * cos(-(root.start + root.fraction) * 360deg);
+        x: 50 - 50 * sin(-(root.start + root.fraction) * 360deg);
+        sweep: true;
+        large-arc: root.fraction > 0.5;
+    }
+    LineTo { x: 50; y: 50; }
+}
+
+// ECU Workbench uses a frameless Slint window with a small native-control
+// surface. Keep this outside the page layout so it is always anchored to the
+// actual window edge.
+component FrameControl inherits Rectangle {
+    in property <string> glyph;
+    in property <bool> destructive: false;
+    callback clicked();
+    width: 42px;
+    height: 42px;
+    background: control-area.has-hover
+        ? (root.destructive ? #c42b1c : MaterialPalette.surface_container_high)
+        : transparent;
+    control-area := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+    Text {
+        width: 100%; height: 100%;
+        text: root.glyph;
+        color: control-area.has-hover && root.destructive ? #ffffff : MaterialPalette.on_surface;
+        font-size: 17px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+component CompanionWindowFrame inherits Rectangle {
+    in property <bool> show-back: false;
+    callback menu();
+    callback start-drag();
+    callback minimize();
+    callback toggle-maximize();
+    callback close();
+    height: 42px;
+    background: MaterialPalette.surface_container;
+
+    // Winit handles the drag itself, which preserves Aero Snap and native
+    // Windows desktop behavior just as it does in ECU Workbench.
+    drag-region := TouchArea {
+        x: 48px;
+        y: 0px;
+        width: max(0px, parent.width - 48px - 126px);
+        height: parent.height;
+        mouse-cursor: grab;
+        pointer-event(event) => {
+            if event.button == PointerEventButton.left && event.kind == PointerEventKind.down {
+                root.start-drag();
+            }
+        }
+        double-clicked => { root.toggle-maximize(); }
+    }
+    if !root.show-back : BurgerGrip {
+        x: 0px; y: 0px;
+        width: 42px; height: 42px;
+        clicked => { root.menu(); }
+    }
+    if root.show-back : FrameControl {
+        x: 0px; y: 0px;
+        glyph: "\u{2190}";
+        accessible-role: button;
+        accessible-label: "Back";
+        clicked => { root.menu(); }
+    }
+    Image {
+        x: 50px; y: 11px;
+        width: 20px; height: 20px;
+        source: @image-url("../resources/IBKR.png");
+        image-fit: contain;
+    }
+    MaterialText {
+        x: 78px;
+        width: max(0px, parent.width - 78px - 126px);
+        height: parent.height;
+        text: "IBKR Companion";
+        color: MaterialPalette.on_surface;
+        style: { font_size: 14px, font_weight: 650 };
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    FrameControl {
+        x: parent.width - 126px; y: 0px;
+        glyph: "−";
+        clicked => { root.minimize(); }
+    }
+    FrameControl {
+        x: parent.width - 84px; y: 0px;
+        glyph: "□";
+        clicked => { root.toggle-maximize(); }
+    }
+    FrameControl {
+        x: parent.width - 42px; y: 0px;
+        glyph: "×";
+        destructive: true;
+        clicked => { root.close(); }
+    }
+}
+
+component CompanionDrawer inherits Rectangle {
+    in-out property <int> current-page-index: 0;
+    in property <string> connection-status;
+    in property <string> count-text;
+    callback page-selected(int);
+    callback settings-requested();
+
+    background: MaterialPalette.surface_container_low;
+    border-radius: 0px;
+
+    MaterialText {
+        x: 16px; y: 16px;
+        width: parent.width - 32px;
+        height: 32px;
+        text: "IBKR Companion";
+        color: MaterialPalette.on_surface;
+        style: { font_size: 20px, font_weight: 650 };
+        vertical-alignment: center;
+    }
+    MaterialText {
+        x: 16px; y: 62px;
+        width: parent.width - 32px;
+        height: 20px;
+        text: "WORKSPACE";
+        color: MaterialPalette.on_surface_variant;
+        style: { font_size: 12px, font_weight: 700 };
+        vertical-alignment: center;
+    }
+    Rectangle {
+        x: 8px; y: 88px;
+        width: parent.width - 16px;
+        height: 52px;
+        border-radius: 26px;
+        background: root.current-page-index == 0 ? #a80d2b : drawer-item.has-hover ? MaterialPalette.surface_container_high : transparent;
+        drawer-item := TouchArea { mouse-cursor: pointer; clicked => { root.current-page-index = 0; root.page-selected(0); } }
+        MaterialText {
+            x: 20px;
+            width: parent.width - 40px;
+            height: 100%;
+            text: "Recent exits";
+            color: root.current-page-index == 0 ? #ffffff : MaterialPalette.on_surface;
+            style: { font_size: 14px, font_weight: 600 };
+            vertical-alignment: center;
+        }
+    }
+    Rectangle {
+        x: 8px; y: 148px;
+        width: parent.width - 16px;
+        height: 52px;
+        border-radius: 26px;
+        background: root.current-page-index == 1 ? #a80d2b : portfolio-item.has-hover ? MaterialPalette.surface_container_high : transparent;
+        portfolio-item := TouchArea { mouse-cursor: pointer; clicked => { root.current-page-index = 1; root.page-selected(1); } }
+        MaterialText {
+            x: 20px;
+            width: parent.width - 40px;
+            height: 100%;
+            text: "Portfolio overview";
+            color: root.current-page-index == 1 ? #ffffff : MaterialPalette.on_surface;
+            style: { font_size: 14px, font_weight: 600 };
+            vertical-alignment: center;
+        }
+    }
+    Rectangle {
+        x: 8px; y: 208px; width: parent.width - 16px; height: 52px;
+        border-radius: 26px;
+        background: root.current-page-index == 2 ? #a80d2b : options-item.has-hover ? MaterialPalette.surface_container_high : transparent;
+        options-item := TouchArea { mouse-cursor: pointer; clicked => { root.current-page-index = 2; root.page-selected(2); } }
+        MaterialText {
+            x: 20px; width: parent.width - 40px; height: 100%; text: "Options";
+            color: root.current-page-index == 2 ? #ffffff : MaterialPalette.on_surface;
+            style: { font_size: 14px, font_weight: 600 }; vertical-alignment: center;
+        }
+    }
+    Rectangle {
+        x: 8px; y: 268px;
+        width: parent.width - 16px; height: 52px;
+        border-radius: 26px;
+        background: settings-item.has-hover ? MaterialPalette.surface_container_high : transparent;
+        settings-item := TouchArea { mouse-cursor: pointer; clicked => { root.settings-requested(); } }
+        MaterialText {
+            x: 20px; width: parent.width - 40px; height: 100%;
+            text: "Settings"; color: MaterialPalette.on_surface;
+            style: { font_size: 14px, font_weight: 600 }; vertical-alignment: center;
+        }
+    }
+    Rectangle {
+        x: 16px;
+        y: parent.height - 82px;
+        width: parent.width - 32px;
+        height: 1px;
+        background: MaterialPalette.outline_variant;
+    }
+    VerticalLayout {
+        x: 16px;
+        y: parent.height - 68px;
+        width: parent.width - 32px;
+        height: 56px;
+        spacing: 8px;
+        MaterialText {
+            text: root.connection-status;
+            color: MaterialPalette.on_surface_variant;
+            style: { font_size: 12px };
+            wrap: word-wrap;
+            min-width: 0px;
+        }
+        MaterialText {
+            text: root.count-text;
+            color: MaterialPalette.on_surface;
+            style: { font_size: 12px };
+            wrap: word-wrap;
+            min-width: 0px;
+        }
+    }
+}
+
+export component AppWindow inherits MaterialWindow {
     title: "IBKR Companion";
     icon: @image-url("../resources/IBKR.png");
+    no-frame: true;
+    // Frameless windows need an explicit hit area for native edge/corner resizing.
+    resize-border-width: 8px;
     preferred-width: 1240px;
     preferred-height: 790px;
     min-width: 1020px;
     min-height: 580px;
-    background: #17191d;
+    background: MaterialPalette.background;
 
     private property <bool> detail-visible: false;
     private property <bool> show-extra-columns: false;
+    in property <[OptionRow]> option-rows;
+    in property <[PremiumRow]> premium-rows;
+    in property <string> premium-total;
+    in property <string> options-status;
+    in property <string> options-pnl;
+    in property <string> option-sort-column: "expiry";
+    in property <bool> option-sort-ascending: true;
+    in-out property <OptionRow> selected-option;
+    in-out property <bool> option-detail-visible: false;
+    private property <bool> option-extra-columns: root.width >= (root.option-detail-visible ? 1400px : 1050px);
+    private property <bool> option-greek-columns: root.width >= (root.option-detail-visible ? 1650px : 1200px);
+    private property <bool> option-expiry-column: root.width >= (root.option-detail-visible ? 1300px : 950px);
+    callback option-sort(string);
+    callback select-option(OptionRow);
+    select-option(row) => {
+        root.selected-option = row;
+        root.option-detail-visible = true;
+        keyboard-shortcuts.focus();
+    }
+    in-out property <bool> drawer-open: false;
+    out property <bool> settings-open: false;
+    in-out property <int> backend-provider: 0;
+    in-out property <bool> backend-enabled: true;
+    in property <bool> fmp-key-set: false;
+    in property <string> fundamentals-status: "Yahoo Finance ready - no API key required";
+    callback backend-saved(int, bool, string, bool);
+    callback fundamentals-demand(bool);
+    callback fundamentals-refresh();
+    callback open-settings();
+    callback dismiss-top-page();
+    open-settings => { root.settings-open = true; keyboard-shortcuts.focus(); }
+    dismiss-top-page => { root.settings-open = false; keyboard-shortcuts.focus(); }
+    in-out property <int> current-page-index: 0;
+    changed current-page-index => { root.fundamentals-demand(root.current-page-index == 1); }
     changed width => { root.show-extra-columns = root.width >= (root.detail-visible ? 1300px : 1000px); }
     changed detail-visible => { root.show-extra-columns = root.width >= (root.detail-visible ? 1300px : 1000px); }
 
     in property <[TradeRow]> rows;
     in property <string> connection-status: "Connecting to Client Portal…";
     in property <string> count-text: "Loading recent exits";
+    in property <string> portfolio-total: "Waiting for market values";
+    in property <string> portfolio-count: "Loading held stocks";
+    in property <[SectorSlice]> sector-slices;
+    in property <[HoldingTile]> holding-tiles;
+    in property <[HeatCell]> heat-cells;
+    in property <string> heatmap-note;
+    private property <int> heatmap-hover-index: -1;
+    private property <float> heatmap-pointer-x: 0;
+    private property <float> heatmap-pointer-y: 0;
+    out property <HoldingTile> hovered-stock;
+    out property <bool> heatmap-tooltip-visible: root.heatmap-hover-index >= 0 && root.current-page-index == 1 && !root.drawer-open && !root.settings-open;
+    out property <float> heatmap-tooltip-x: stock-bubble.x / 1px;
+    out property <float> heatmap-tooltip-y: stock-bubble.y / 1px;
+    out property <float> heatmap-tooltip-width: stock-bubble.width / 1px;
+    out property <float> heatmap-tooltip-height: stock-bubble.height / 1px;
+    out property <float> heatmap-origin-x: heatmap.absolute-position.x / 1px;
+    out property <float> heatmap-origin-y: heatmap.absolute-position.y / 1px;
+    in-out property <int> heatmap-scale: 0;
+    out property <float> heatmap-width: heatmap.width / 1px;
+    out property <float> heatmap-height: heatmap.height / 1px;
+    callback layout-heatmap();
+    changed heatmap-scale => { root.layout-heatmap(); }
+    changed heatmap-width => { root.layout-heatmap(); }
+    changed heatmap-height => { root.layout-heatmap(); }
     in property <string> selected-symbol: "Select a stock";
     in property <string> selected-key: "";
     in property <string> selected-detail: "Recent exits and market data will appear here.";
@@ -128,7 +535,7 @@ export component AppWindow inherits Window {
     in-out property <bool> selected-alert: false;
     in property <string> alert-text: "";
     in property <string> sort-column: "delta";
-    in property <bool> sort-ascending: true;
+    in property <bool> sort-ascending: false;
     in-out property <string> filter-value: "All exits";
     in-out property <string> period-value: "Inception";
     callback refresh();
@@ -141,8 +548,35 @@ export component AppWindow inherits Window {
     callback pin-selected();
     callback reset-alert();
     callback snooze-alert();
+    callback start-window-drag();
+    callback minimize-window();
+    callback toggle-maximize-window();
+    callback close-window();
+
+    forward-focus: keyboard-shortcuts;
+    keyboard-shortcuts := FocusScope {
+        width: parent.width; height: parent.height;
+        // Capture Escape even while a settings input or dropdown owns focus.
+        capture-key-pressed(event) => {
+            if event.text == Key.Escape && root.settings-open {
+                root.dismiss-top-page(); return accept;
+            }
+            if event.text == Key.Escape && root.current-page-index == 2 && root.option-detail-visible && !root.drawer-open {
+                root.option-detail-visible = false; return accept;
+            }
+            return reject;
+        }
+    page := Rectangle {
+        x: 0px;
+        y: 42px;
+        width: parent.width;
+        height: parent.height - self.y;
+        background: MaterialPalette.background;
+        visible: root.current-page-index == 0;
 
     VerticalLayout {
+        width: parent.width;
+        height: parent.height;
         padding: 22px;
         spacing: 16px;
 
@@ -160,12 +594,6 @@ export component AppWindow inherits Window {
                 Text { text: "Prices per share in each contract's trading currency"; color: #84909c; font-size: 11px; }
             }
             Rectangle { horizontal-stretch: 1; background: transparent; }
-            VerticalLayout {
-                alignment: center;
-                Text { text: root.connection-status; color: #aab3bf; font-size: 12px; horizontal-alignment: right; }
-                Text { text: root.count-text; color: #d7dce3; font-size: 13px; horizontal-alignment: right; }
-            }
-            Button { text: "Refresh"; clicked => { root.refresh(); } }
         }
 
         Rectangle {
@@ -183,12 +611,24 @@ export component AppWindow inherits Window {
                     current-value: root.filter-value;
                     selected(value) => { root.filter-value = value; root.filter-changed(value); }
                 }
-                for period in ["1 Week", "1 Month", "1 Year", "Year to Date", "Inception"]: PeriodPill {
-                    label: period;
-                    active: root.period-value == period;
-                    activated => { root.period-value = period; root.period-changed(period); }
+                for period in ["1 Week", "1 Month", "1 Year", "Year to Date", "Inception"]: Rectangle {
+                    width: period == "Year to Date" ? 132px : 104px;
+                    height: 40px;
+                    IbkrFilterChip {
+                        width: 100%;
+                        height: 100%;
+                        text: period;
+                        checked: root.period-value == period;
+                        clicked => { root.period-value = period; root.period-changed(period); }
+                    }
                 }
                 Rectangle { horizontal-stretch: 1; background: transparent; }
+                IbkrButton {
+                    text: "Refresh";
+                    width: 92px;
+                    height: 40px;
+                    clicked => { root.refresh(); }
+                }
             }
         }
 
@@ -210,7 +650,7 @@ export component AppWindow inherits Window {
                         spacing: 10px;
                         Text { text: "RECENT EXITS"; color: #9aa4b0; font-size: 11px; font-weight: 700; letter-spacing: 1px; }
                         Rectangle { horizontal-stretch: 1; background: transparent; }
-                        Button {
+                        TextButton {
                             text: root.detail-visible ? "Hide details" : "Show details";
                             height: 28px;
                             clicked => { root.detail-visible = !root.detail-visible; }
@@ -231,6 +671,7 @@ export component AppWindow inherits Window {
                             SortHeader { title: "VWAP BUY"; column: "average_buy"; active-column: root.sort-column; ascending: root.sort-ascending; floor-width: 95px; numeric: true; activated => { root.sort-changed("average_buy"); } }
                             SortHeader { title: "EXIT"; column: "exit"; active-column: root.sort-column; ascending: root.sort-ascending; floor-width: 70px; numeric: true; activated => { root.sort-changed("exit"); } }
                             SortHeader { title: "MARKET"; column: "market"; active-column: root.sort-column; ascending: root.sort-ascending; floor-width: 75px; numeric: true; activated => { root.sort-changed("market"); } }
+                            SortHeader { title: "SINCE OPEN"; column: "since_open"; active-column: root.sort-column; ascending: root.sort-ascending; floor-width: 95px; numeric: true; activated => { root.sort-changed("since_open"); } }
                             SortHeader { title: "VS EXIT"; column: "delta"; active-column: root.sort-column; ascending: root.sort-ascending; floor-width: 90px; numeric: true; activated => { root.sort-changed("delta"); } }
                             SortHeader { title: "TARGET"; column: "target"; active-column: root.sort-column; ascending: root.sort-ascending; floor-width: 70px; numeric: true; activated => { root.sort-changed("target"); } }
                         }
@@ -255,6 +696,7 @@ export component AppWindow inherits Window {
                                 TableCell { value: row.average-buy; floor-width: 95px; ink: row.average-buy-highlight ? #e5b94f : #c1c8d1; numeric: true; }
                                 TableCell { value: row.sale; floor-width: 70px; numeric: true; }
                                 TableCell { value: row.price; floor-width: 75px; ink: #f0f2f5; numeric: true; strong: true; }
+                                TableCell { value: row.open-trend; floor-width: 95px; ink: row.open-trend-tone > 0 ? #49cf9b : row.open-trend-tone < 0 ? #f17483 : #a5aeb9; numeric: true; }
                                 TableCell { value: row.delta; floor-width: 90px; ink: row.delta-tone > 0 ? #00a36c : row.delta-tone < 0 ? #e2374a : #a5aeb9; numeric: true; }
                                 TableCell { value: row.target; floor-width: 70px; ink: #c1c8d1; numeric: true; }
                             }
@@ -368,7 +810,7 @@ export component AppWindow inherits Window {
                                 accepted => { root.target-saved(root.selected-mode, self.text); }
                             }
                         }
-                        Button { text: "Save"; clicked => { root.target-saved(root.selected-mode, root.selected-target); } }
+                        IbkrButton { text: "Save"; width: 76px; clicked => { root.target-saved(root.selected-mode, root.selected-target); } }
                     }
                     CheckBox { text: "Alert on fresh crossing"; checked: root.selected-alert; toggled => { root.selected-alert = self.checked; root.alert-changed(self.checked); } }
                     HorizontalLayout {
@@ -382,5 +824,459 @@ export component AppWindow inherits Window {
                 }
             }
         }
+    }
+
+    }
+
+    options-page := Rectangle {
+        private property <length> premiums-height: 210px;
+        x: 0px; y: 42px; width: parent.width; height: parent.height - self.y;
+        visible: root.current-page-index == 2;
+        background: #101216;
+        VerticalLayout {
+            padding: 22px; spacing: 16px;
+            HorizontalLayout {
+                height: 66px; spacing: 20px;
+                VerticalLayout {
+                    horizontal-stretch: 1; spacing: 4px;
+                    Text { text: "Options"; color: #eceef1; font-size: 28px; font-weight: 700; }
+                    Text { text: root.options-status; color: #9aa4b0; font-size: 12px; wrap: word-wrap; }
+                }
+                VerticalLayout {
+                    alignment: center; spacing: 4px;
+                    Text { text: "UNREALIZED P/L"; color: #9aa4b0; font-size: 10px; font-weight: 700; horizontal-alignment: right; }
+                    Text { text: root.options-pnl; color: #eceef1; font-size: 20px; font-weight: 650; horizontal-alignment: right; }
+                }
+                IbkrButton { text: "Refresh"; width: 92px; height: 40px; clicked => { root.refresh(); } }
+            }
+            HorizontalLayout {
+                spacing: 12px; vertical-stretch: 1;
+                Rectangle {
+                    horizontal-stretch: 1; min-width: 570px;
+                    background: #1c1f24; border-radius: 10px; border-width: 1px; border-color: #3b3f46;
+                    VerticalLayout {
+                        padding: 12px; spacing: 8px;
+                        HorizontalLayout {
+                            height: 30px;
+                            Text { text: "OPEN POSITIONS"; color: #9aa4b0; font-size: 11px; font-weight: 700; letter-spacing: 1px; }
+                            Rectangle { horizontal-stretch: 1; background: transparent; }
+                            Text { text: "Select a row for details"; color: #89939f; font-size: 11px; }
+                        }
+                        Rectangle {
+                            height: 32px; background: #191b20; border-radius: 4px;
+                            HorizontalLayout {
+                                padding-left: 4px; padding-right: 4px; spacing: 0px;
+                                SortHeader { title: "SYMBOL"; column: "symbol"; active-column: root.option-sort-column; ascending: root.option-sort-ascending; floor-width: 70px; activated => { root.option-sort("symbol"); } }
+                                SortHeader { title: "SHARE COST"; column: "share-cost"; active-column: root.option-sort-column; ascending: root.option-sort-ascending; floor-width: 85px; numeric: true; activated => { root.option-sort("share-cost"); } }
+                                SortHeader { title: "MARKET"; column: "market"; active-column: root.option-sort-column; ascending: root.option-sort-ascending; floor-width: 70px; numeric: true; activated => { root.option-sort("market"); } }
+                                SortHeader { title: "CONTRACT"; column: "contract"; active-column: root.option-sort-column; ascending: root.option-sort-ascending; floor-width: 85px; activated => { root.option-sort("contract"); } }
+                                if root.option-expiry-column : SortHeader { title: "EXPIRY"; column: "expiry"; active-column: root.option-sort-column; ascending: root.option-sort-ascending; floor-width: 88px; activated => { root.option-sort("expiry"); } }
+                                SortHeader { title: "DTE"; column: "dte"; active-column: root.option-sort-column; ascending: root.option-sort-ascending; floor-width: 48px; numeric: true; activated => { root.option-sort("dte"); } }
+                                SortHeader { title: "POSITION"; column: "position"; active-column: root.option-sort-column; ascending: root.option-sort-ascending; floor-width: 75px; numeric: true; activated => { root.option-sort("position"); } }
+                                SortHeader { title: "MARK"; column: "mark"; active-column: root.option-sort-column; ascending: root.option-sort-ascending; floor-width: 60px; numeric: true; activated => { root.option-sort("mark"); } }
+                                SortHeader { title: "UNREAL. P/L"; column: "pnl"; active-column: root.option-sort-column; ascending: root.option-sort-ascending; floor-width: 112px; numeric: true; activated => { root.option-sort("pnl"); } }
+                                if root.option-extra-columns : SortHeader { title: "RETURN"; column: "return"; active-column: root.option-sort-column; ascending: root.option-sort-ascending; floor-width: 75px; numeric: true; activated => { root.option-sort("return"); } }
+                                if root.option-extra-columns : SortHeader { title: "DELTA"; column: "delta"; active-column: root.option-sort-column; ascending: root.option-sort-ascending; floor-width: 65px; numeric: true; activated => { root.option-sort("delta"); } }
+                                if root.option-greek-columns : SortHeader { title: "GAMMA"; column: "gamma"; active-column: root.option-sort-column; ascending: root.option-sort-ascending; floor-width: 65px; numeric: true; activated => { root.option-sort("gamma"); } }
+                                if root.option-greek-columns : SortHeader { title: "THETA"; column: "theta"; active-column: root.option-sort-column; ascending: root.option-sort-ascending; floor-width: 65px; numeric: true; activated => { root.option-sort("theta"); } }
+                                if root.option-greek-columns : SortHeader { title: "VEGA"; column: "vega"; active-column: root.option-sort-column; ascending: root.option-sort-ascending; floor-width: 65px; numeric: true; activated => { root.option-sort("vega"); } }
+                            }
+                        }
+                        if root.option-rows.length == 0 : Text {
+                            text: "No open options contracts to display."; color: #9aa4b0; font-size: 14px;
+                            height: 90px; horizontal-alignment: center; vertical-alignment: center;
+                        }
+                        ListView {
+                            vertical-stretch: 1; min-width: 0px;
+                            for row[index] in root.option-rows : Rectangle {
+                                height: 48px; width: parent.width;
+                                private property <bool> selected: root.selected-option.key == row.key;
+                                background: self.selected ? #303c4d : option-touch.has-hover ? #292e36 : Math.mod(index, 2) == 0 ? #202329 : #1c1f24;
+                                Rectangle { x: 0px; y: 0px; width: 3px; height: parent.height - 1px; background: parent.selected ? #6daeff : row.urgent ? #e79b27 : transparent; }
+                                Rectangle { y: parent.height - 1px; height: 1px; width: parent.width; background: #353a42; }
+                                HorizontalLayout {
+                                    padding-left: 4px; padding-right: 4px; spacing: 0px;
+                                    TableCell { value: row.symbol; floor-width: 70px; strong: true; ink: #f0f2f5; }
+                                    TableCell { value: row.share-cost; floor-width: 85px; numeric: true; }
+                                    Rectangle {
+                                        min-width: 70px; horizontal-stretch: 1;
+                                        VerticalLayout {
+                                            padding-left: 6px; padding-right: 6px; alignment: center; spacing: 2px;
+                                            Text { text: row.market-price; color: row.moneyness == "ITM" ? #49cf9b : row.moneyness == "OTM" ? #f17483 : #f0f2f5; font-size: 13px; font-weight: 650; horizontal-alignment: right; }
+                                            Text { text: row.market-status; color: #89939f; font-size: 9px; horizontal-alignment: right; }
+                                        }
+                                    }
+                                    TableCell { value: row.contract-short; floor-width: 85px; }
+                                    if root.option-expiry-column : TableCell { value: row.expiry-short; floor-width: 88px; ink: #b6bfcb; }
+                                    TableCell { value: row.dte; floor-width: 48px; numeric: true; strong: row.urgent; ink: row.urgent ? #e9af51 : #b6bfcb; }
+                                    TableCell { value: row.quantity; floor-width: 75px; numeric: true; }
+                                    Rectangle {
+                                        min-width: 60px; horizontal-stretch: 1;
+                                        VerticalLayout {
+                                            padding-right: 6px; padding-left: 6px; alignment: center; spacing: 2px;
+                                            Text { text: row.mark; color: #f0f2f5; font-size: 13px; font-weight: 650; horizontal-alignment: right; }
+                                            Text { text: row.quote-status; color: #89939f; font-size: 9px; horizontal-alignment: right; }
+                                        }
+                                    }
+                                    TableCell { value: row.pnl-value; floor-width: 112px; numeric: true; strong: true; ink: row.pnl-tone > 0 ? #49cf9b : row.pnl-tone < 0 ? #f17483 : #a5aeb9; }
+                                    if root.option-extra-columns : TableCell { value: row.pnl-percent; floor-width: 75px; numeric: true; ink: row.pnl-tone > 0 ? #49cf9b : row.pnl-tone < 0 ? #f17483 : #a5aeb9; }
+                                    if root.option-extra-columns : TableCell { value: row.delta; floor-width: 65px; numeric: true; ink: #a5aeb9; }
+                                    if root.option-greek-columns : TableCell { value: row.gamma; floor-width: 65px; numeric: true; ink: #a5aeb9; }
+                                    if root.option-greek-columns : TableCell { value: row.theta; floor-width: 65px; numeric: true; ink: #a5aeb9; }
+                                    if root.option-greek-columns : TableCell { value: row.vega; floor-width: 65px; numeric: true; ink: #a5aeb9; }
+                                }
+                                option-touch := TouchArea { mouse-cursor: pointer; clicked => { root.select-option(row); } }
+                            }
+                        }
+                        Text { text: "Market = underlying price. Share Cost = average purchase price per underlying share held in this account. ITM/ATM/OTM = in/at/out of the money; ATM matches strike to the cent. DTE = days to expiry. Quotes may be delayed or frozen; — = unavailable. Prices in contract currency."; color: #89939f; font-size: 10px; wrap: word-wrap; }
+                    }
+                }
+                if root.option-detail-visible : Rectangle {
+                    width: 310px; horizontal-stretch: 0;
+                    background: #22252a; border-radius: 10px; border-width: 1px; border-color: #3b3f46;
+                    VerticalLayout {
+                        padding: 14px; spacing: 12px;
+                        HorizontalLayout {
+                            height: 30px;
+                            Text { text: root.selected-option.symbol; color: #f0f2f5; font-size: 24px; font-weight: 700; horizontal-stretch: 1; }
+                            TextButton { text: "Close"; clicked => { root.option-detail-visible = false; } }
+                        }
+                        Text { text: root.selected-option.contract-short + " / " + root.selected-option.quantity; color: #cbd3dd; font-size: 15px; font-weight: 600; }
+                        Text { text: "Underlying " + root.selected-option.market-price + " / " + root.selected-option.moneyness + " (" + root.selected-option.market-status + ")"; color: #aab4c0; font-size: 12px; wrap: word-wrap; }
+                        Text { text: root.selected-option.expiry; color: root.selected-option.urgent ? #e9af51 : #aab4c0; font-size: 12px; wrap: word-wrap; }
+                        Rectangle { height: 1px; background: #3b424c; }
+                        Text { text: "UNREALIZED P/L"; color: #9aa4b0; font-size: 10px; font-weight: 700; }
+                        Text { text: root.selected-option.pnl-value; color: root.selected-option.pnl-tone > 0 ? #49cf9b : root.selected-option.pnl-tone < 0 ? #f17483 : #cbd3dd; font-size: 26px; font-weight: 700; }
+                        Text { text: root.selected-option.pnl-percent + " on cost basis"; color: #aab4c0; font-size: 12px; }
+                        ScrollView {
+                            vertical-stretch: 1;
+                            content-width: self.width;
+                            VerticalLayout {
+                                width: parent.width; spacing: 12px; padding-right: 8px;
+                                Text { text: "POSITION"; color: #9aa4b0; font-size: 10px; font-weight: 700; }
+                                Text { text: root.selected-option.position; color: #d0d7e0; font-size: 12px; wrap: word-wrap; }
+                                Text { text: root.selected-option.account; color: #9aa4b0; font-size: 11px; wrap: word-wrap; }
+                                Rectangle { height: 1px; background: #3b424c; }
+                                Text { text: "QUOTES & COST"; color: #9aa4b0; font-size: 10px; font-weight: 700; }
+                                Text { text: root.selected-option.pricing; color: #d0d7e0; font-size: 12px; wrap: word-wrap; }
+                                Text { text: root.selected-option.pnl; color: #d0d7e0; font-size: 12px; wrap: word-wrap; }
+                                Rectangle { height: 1px; background: #3b424c; }
+                                Text { text: "GREEKS & LIQUIDITY"; color: #9aa4b0; font-size: 10px; font-weight: 700; }
+                                Text { text: root.selected-option.greeks; color: #d0d7e0; font-size: 12px; wrap: word-wrap; }
+                                Text { text: root.selected-option.liquidity; color: #d0d7e0; font-size: 12px; wrap: word-wrap; }
+                                Text { text: "CONTRACT"; color: #9aa4b0; font-size: 10px; font-weight: 700; }
+                                Text { text: root.selected-option.contract; color: #9aa4b0; font-size: 11px; wrap: word-wrap; }
+                                Text { text: "Calls: ITM above strike. Puts: ITM below strike. ATM: equal at displayed precision. Classification uses the underlying quote shown. P/L is from the latest position refresh. Return = P/L / absolute cost basis."; color: #89939f; font-size: 10px; wrap: word-wrap; }
+                            }
+                        }
+                    }
+                }
+            }
+            divider := Rectangle {
+                height: 10px;
+                background: resize-lists.has-hover || resize-lists.pressed ? #303c4d : transparent;
+                border-radius: 4px;
+                Rectangle {
+                    x: (parent.width - self.width) / 2; y: 4px;
+                    width: 64px; height: 2px; border-radius: 1px;
+                    background: resize-lists.has-hover || resize-lists.pressed ? #6daeff : #626d7b;
+                }
+                resize-lists := TouchArea {
+                    mouse-cursor: ns-resize;
+                    private property <length> anchor-y;
+                    private property <length> start-height;
+                    pointer-event(event) => {
+                        if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                            self.anchor-y = divider.y + self.mouse-y;
+                            self.start-height = premiums-panel.height;
+                        }
+                    }
+                    moved => {
+                        if self.pressed {
+                            options-page.premiums-height = max(140px, min(options-page.height - 320px,
+                                self.start-height - (divider.y + self.mouse-y - self.anchor-y)));
+                        }
+                    }
+                }
+            }
+            premiums-panel := Rectangle {
+                height: max(140px, min(options-page.premiums-height, options-page.height - 320px));
+                background: #1c1f24; border-radius: 10px; border-width: 1px; border-color: #3b3f46;
+                VerticalLayout {
+                    padding: 12px; spacing: 6px;
+                    HorizontalLayout {
+                        height: 24px;
+                        Text { text: "PREMIUMS COLLECTED · OPTION SALES"; color: #9aa4b0; font-size: 11px; font-weight: 700; }
+                        Rectangle { horizontal-stretch: 1; background: transparent; }
+                        Text { text: root.premium-total; color: #49cf9b; font-size: 14px; font-weight: 650; }
+                    }
+                    HorizontalLayout {
+                        height: 24px;
+                        TableCell { value: "CONTRACT"; floor-width: 180px; }
+                        TableCell { value: "ACCOUNT"; floor-width: 100px; }
+                        TableCell { value: "SOLD AT"; floor-width: 130px; }
+                        TableCell { value: "CONTRACTS"; floor-width: 85px; numeric: true; }
+                        TableCell { value: "PREMIUM / SHARE"; floor-width: 120px; numeric: true; }
+                        TableCell { value: "PROCEEDS"; floor-width: 140px; numeric: true; }
+                    }
+                    if root.premium-rows.length == 0 : Text {
+                        text: "No option sales recorded yet."; color: #9aa4b0; font-size: 12px;
+                    }
+                    ListView {
+                        vertical-stretch: 1;
+                        for sale[index] in root.premium-rows : Rectangle {
+                            height: 30px; width: parent.width;
+                            background: Math.mod(index, 2) == 0 ? #202329 : #1c1f24;
+                            HorizontalLayout {
+                                TableCell { value: sale.contract; floor-width: 180px; }
+                                TableCell { value: sale.account; floor-width: 100px; }
+                                TableCell { value: sale.date; floor-width: 130px; }
+                                TableCell { value: sale.quantity; floor-width: 85px; numeric: true; }
+                                TableCell { value: sale.price; floor-width: 120px; numeric: true; }
+                                TableCell { value: sale.proceeds; floor-width: 140px; numeric: true; ink: #49cf9b; }
+                            }
+                        }
+                    }
+                    Text { text: "Recorded sales from IBKR's recent trade feed, retained locally. Includes opening and closing sales; buybacks are not deducted. Proceeds are reported by IBKR; — means unavailable."; color: #89939f; font-size: 10px; wrap: word-wrap; }
+                }
+            }
+        }
+    }
+    portfolio-page := Rectangle {
+        x: 0px;
+        y: 42px;
+        width: parent.width;
+        height: parent.height - self.y;
+        background: MaterialPalette.background;
+        visible: root.current-page-index == 1;
+        VerticalLayout {
+            padding: 22px;
+            spacing: 16px;
+            HorizontalLayout {
+                height: 70px;
+                VerticalLayout {
+                    spacing: 3px;
+                    HorizontalLayout {
+                        spacing: 5px;
+                        Text { text: "IBKR"; color: #ea223c; font-size: 12px; font-weight: 700; letter-spacing: 1.5px; }
+                        Text { text: "Companion"; color: #d7dce3; font-size: 12px; font-weight: 700; letter-spacing: 1.5px; }
+                    }
+                    Text { text: "Portfolio overview"; color: #eceef1; font-size: 28px; font-weight: 700; }
+                    Text { text: "Held stocks from Client Portal"; color: #84909c; font-size: 11px; }
+                }
+                Rectangle { horizontal-stretch: 1; background: transparent; }
+                VerticalLayout {
+                    alignment: center;
+                    Text { text: root.portfolio-total; color: #f0f2f5; font-size: 18px; font-weight: 700; horizontal-alignment: right; }
+                    Text { text: root.portfolio-count; color: #aab3bf; font-size: 12px; horizontal-alignment: right; }
+                }
+            }
+            HorizontalLayout {
+                spacing: 16px;
+                vertical-stretch: 1;
+                Rectangle {
+                    min-width: 410px;
+                    preferred-width: 460px;
+                    horizontal-stretch: 0;
+                    border-radius: 10px;
+                    background: #1c1f24;
+                    border-color: #3b3f46;
+                    border-width: 1px;
+                    VerticalLayout {
+                        padding: 16px;
+                        spacing: 10px;
+                        Text { text: "SECTOR / INDUSTRY ALLOCATION"; color: #9aa4b0; font-size: 11px; font-weight: 700; letter-spacing: 1px; }
+                        Rectangle {
+                            height: 250px;
+                            background: transparent;
+                            for slice in root.sector-slices : PortfolioPieSlice {
+                                x: (parent.width - 230px) / 2;
+                                y: 10px;
+                                width: 230px;
+                                height: 230px;
+                                start: slice.start;
+                                fraction: slice.fraction;
+                                palette: slice.palette;
+                            }
+                            Text {
+                                x: 0px; y: 102px; width: parent.width; height: 34px;
+                                text: root.portfolio-total;
+                                color: #f0f2f5;
+                                font-size: 20px;
+                                font-weight: 700;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                            Text {
+                                x: 0px; y: 132px; width: parent.width; height: 20px;
+                                text: root.portfolio-count;
+                                color: #9aa4b0;
+                                font-size: 11px;
+                                horizontal-alignment: center;
+                            }
+                        }
+                        ListView {
+                            vertical-stretch: 1;
+                            for slice[index] in root.sector-slices : HorizontalLayout {
+                                height: 28px;
+                                spacing: 8px;
+                                Rectangle {
+                                    width: 10px; height: 10px;
+                                    border-radius: 5px;
+                                    background: slice.palette == 0 ? #d70f36 : slice.palette == 1 ? #e79b27 : slice.palette == 2 ? #148c69 : slice.palette == 3 ? #3f87d7 : slice.palette == 4 ? #9b5cbd : slice.palette == 5 ? #d4547b : slice.palette == 6 ? #4aa4a1 : #7d8796;
+                                }
+                                Text { text: slice.label; color: #c9d0d9; font-size: 12px; overflow: elide; horizontal-stretch: 1; vertical-alignment: center; }
+                                Text { text: slice.amount; color: #f0f2f5; font-size: 12px; font-weight: 650; vertical-alignment: center; horizontal-alignment: right; }
+                                Text { text: round(slice.fraction * 1000) / 10 + "%"; width: 56px; color: #b6bfcb; font-size: 12px; vertical-alignment: center; horizontal-alignment: right; }
+                            }
+                        }
+                    }
+                }
+                Rectangle {
+                    horizontal-stretch: 1;
+                    border-radius: 10px;
+                    background: #1c1f24;
+                    border-color: #3b3f46;
+                    border-width: 1px;
+                    VerticalLayout {
+                        padding: 16px;
+                        spacing: 10px;
+                        HorizontalLayout {
+                            Text { text: "DAY CHANGE HEATMAP"; color: #9aa4b0; font-size: 11px; font-weight: 700; letter-spacing: 1px; vertical-alignment: center; horizontal-stretch: 1; }
+                            Text { text: "Cell size"; color: #c9d0d9; font-size: 12px; vertical-alignment: center; }
+                            ComboBox { model: ["Portfolio size", "Market cap"]; current-index <=> root.heatmap-scale; }
+                        }
+                        Text { text: root.heatmap-note; color: #84909c; font-size: 12px; wrap: word-wrap; }
+                        Text { text: root.fundamentals-status; color: #84909c; font-size: 11px; overflow: elide; }
+                        Text { text: "Hover a stock for full details"; color: #c9d0d9; font-size: 12px; }
+                        heatmap := Rectangle {
+                            vertical-stretch: 1;
+                            min-height: 280px;
+                            background: transparent;
+                            clip: true;
+                            for cell[index] in root.heat-cells : Rectangle {
+                                x: cell.x * 1px; y: cell.y * 1px;
+                                width: cell.w * 1px; height: cell.h * 1px;
+                                clip: true;
+                                background: cell.header ? #282d35 : cell.tile.change-tone > 0 ? #0d5d4a : cell.tile.change-tone < 0 ? #702238 : #30343b;
+                                private property <bool> hovered: !cell.header && cell-area.has-hover;
+                                private property <bool> compact: cell.h < 54 || cell.w < 56;
+                                private property <length> label-size: max(10px, min(24px, min((cell.w - 8) * 1px / max(1, cell.tile.symbol-length * 0.65), (cell.h - 6) * 1px / (self.compact ? 1 : 2.8))));
+                                border-color: self.hovered ? #e9eef6 : #1c1f24;
+                                border-width: cell.header ? 0px : self.hovered ? 2px : 1px;
+                                animate border-color { duration: 100ms; }
+                                Text {
+                                    x: cell.header ? 5px : 3px; y: cell.header ? 0px : parent.compact ? max(0px, (parent.height - 22px) / 2) : max(3px, (parent.height - 48px) / 2);
+                                    width: max(0px, parent.width - (cell.header ? 10px : 6px)); height: cell.header ? parent.height : min(parent.height, 24px);
+                                    text: cell.header ? cell.tile.sector : cell.tile.symbol;
+                                    color: #f5f6f8; font-size: cell.header ? 11px : parent.label-size;
+                                    font-weight: 700; overflow: elide;
+                                    horizontal-alignment: cell.header ? left : center; vertical-alignment: center;
+                                }
+                                if !cell.header && cell.h >= 54 && cell.w >= 56 : Text {
+                                    x: 3px; y: max(27px, (parent.height - 48px) / 2 + 27px);
+                                    width: max(0px, parent.width - 6px); height: 20px;
+                                    text: cell.tile.change; color: #ffffff; font-size: max(10px, min(15px, (cell.w - 8) * 1px / max(1, 7 * 0.65))); font-weight: 700; horizontal-alignment: center;
+                                }
+                                if !cell.header && cell.h > 105 && cell.w > 120 : Text {
+                                    x: 5px; y: parent.height - 21px; width: parent.width - 10px; height: 16px;
+                                    text: root.heatmap-scale == 1 ? cell.tile.market-cap-label : cell.tile.value; color: #d9dee5; font-size: 10px; horizontal-alignment: center; overflow: elide;
+                                }
+                                cell-area := TouchArea {
+                                    changed has-hover => {
+                                        if self.has-hover && !cell.header {
+                                            root.heatmap-hover-index = index;
+                                            root.hovered-stock = cell.tile;
+                                            root.heatmap-pointer-x = cell.x + self.mouse-x / 1px;
+                                            root.heatmap-pointer-y = cell.y + self.mouse-y / 1px;
+                                        } else if root.heatmap-hover-index == index {
+                                            root.heatmap-hover-index = -1;
+                                        }
+                                    }
+                                    moved => {
+                                        if !cell.header {
+                                            root.heatmap-hover-index = index;
+                                            root.hovered-stock = cell.tile;
+                                            root.heatmap-pointer-x = cell.x + self.mouse-x / 1px;
+                                            root.heatmap-pointer-y = cell.y + self.mouse-y / 1px;
+                                        }
+                                    }
+                                }
+                            }
+                            // Paint above all cells; place beside the cursor and clamp to
+                            // the viewport so details stay visible at every edge.
+                            stock-bubble := Rectangle {
+                                visible: root.heatmap-tooltip-visible;
+                                width: min(330px, parent.width - 12px);
+                                height: 164px;
+                                x: max(6px, min(parent.width - self.width - 6px, root.heatmap-pointer-x * 1px + self.width + 20px < parent.width ? root.heatmap-pointer-x * 1px + 16px : root.heatmap-pointer-x * 1px - self.width - 16px));
+                                y: max(6px, min(parent.height - self.height - 6px, root.heatmap-pointer-y * 1px + self.height + 20px < parent.height ? root.heatmap-pointer-y * 1px + 16px : root.heatmap-pointer-y * 1px - self.height - 16px));
+                                background: #202630;
+                                border-color: #7b899b;
+                                border-width: 1px;
+                                border-radius: 9px;
+                                VerticalLayout {
+                                    padding: 12px; spacing: 5px;
+                                    HorizontalLayout {
+                                        Text { text: root.hovered-stock.symbol; color: #f5f6f8; font-size: 19px; font-weight: 700; horizontal-stretch: 1; }
+                                        Text { text: root.hovered-stock.change; color: root.hovered-stock.change-tone > 0 ? #59deb1 : root.hovered-stock.change-tone < 0 ? #ff8ba6 : #c9d0d9; font-size: 17px; font-weight: 700; }
+                                    }
+                                    Text { text: root.hovered-stock.classification; color: #c9d0d9; font-size: 12px; wrap: word-wrap; min-width: 0px; vertical-stretch: 1; }
+                                    Text { text: "Portfolio: " + root.hovered-stock.value; color: #f0f2f5; font-size: 13px; wrap: word-wrap; min-width: 0px; }
+                                    Text { text: root.hovered-stock.market-cap-label; color: #d9dee5; font-size: 13px; }
+                                    Text { text: root.heatmap-scale == 1 ? "Cell area: market cap" : "Cell area: portfolio value"; color: #98a8ba; font-size: 11px; }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // This is a sibling of `page`, with explicit coordinates, so it cannot
+    // enter the table's VerticalLayout flow.
+    CompanionWindowFrame {
+        x: 0px; y: 0px;
+        width: parent.width;
+        show-back: root.settings-open;
+        menu => { if root.settings-open { root.dismiss-top-page(); } else { root.drawer-open = !root.drawer-open; } }
+        start-drag => { root.start-window-drag(); }
+        minimize => { root.minimize-window(); }
+        toggle-maximize => { root.toggle-maximize-window(); }
+        close => { root.close-window(); }
+    }
+
+    // Drawer and scrim are painted last so a click outside the drawer closes it.
+    if root.drawer-open && !root.settings-open : Rectangle {
+        x: 0px;
+        y: 42px;
+        width: parent.width;
+        height: parent.height - self.y;
+        background: MaterialPalette.scrim.with-alpha(32%);
+        scrim := TouchArea { clicked => { root.drawer-open = false; } }
+        CompanionDrawer {
+            x: 0px;
+            y: 0px;
+            width: min(320px, parent.width);
+            height: parent.height;
+            current-page-index <=> root.current-page-index;
+            connection-status: root.connection-status;
+            count-text: root.count-text;
+            page-selected(index) => { root.current-page-index = index; root.drawer-open = false; }
+            settings-requested => { root.open-settings(); }
+        }
+    }
+    // Full-page stack entry overlays the workspace and drawer without changing
+    // either the selected workspace page or the drawer's open state.
+    if root.settings-open : BackendSettingsPage {
+        x: 0px; y: 42px; width: parent.width; height: parent.height - self.y;
+        provider <=> root.backend-provider;
+        enabled <=> root.backend-enabled;
+        key-set: root.fmp-key-set;
+        status: root.fundamentals-status;
+        saved(provider, enabled, key, clear) => { root.backend-saved(provider, enabled, key, clear); }
+        refresh-requested => { root.fundamentals-refresh(); }
+    }
     }
 }

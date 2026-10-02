@@ -1,0 +1,111 @@
+// SettingRow - the base "card" used by every SettingCard variant.
+//
+// Mirrors qfluentwidgets ``SettingCard`` (``qfluentwidgets/
+// components/settings/setting_card.py``): an icon on the
+// left, a title + optional content stack in the middle, and
+// arbitrary trailing widget(s) on the right.  The trailing
+// widgets are supplied via the @children slot so each
+// SettingCard variant (Switch, Options, Range, SpinBox,
+// PushButton) plugs in its own control(s) without
+// re-stating the icon/title/content layout.
+//
+// Spacing matches qfluentwidgets: 16px padding both sides,
+// 16px gap between icon and the title column, 12px gap
+// between sibling trailing widgets.  Card height is 50px
+// when no content is set and 70px when it is - same
+// numbers qfluentwidgets uses.  Cards in a
+// SettingCardGroup are spaced 2px apart vertically so they
+// "stack" with a 1px gap of background between them; the
+// group's outer container handles that spacing.
+//
+// Disabled state drops opacity to 0.38 across the whole
+// card (title + content + icon + trailing widget) so it
+// reads as inert at a glance.  Variants that have an
+// ``enabled`` property (Switch, DropDownMenu, Slider,
+// TextField, button) bind it to ``root.enabled`` so the
+// trailing widget goes inert too.
+//
+// Alignment: the outer HorizontalLayout has exactly TWO
+// children (left cluster + right cluster) and uses
+// ``alignment: space-between``.  The left cluster's
+// inner title column claims ``horizontal-stretch: 1`` so
+// it absorbs every spare pixel, pushing the right
+// cluster (the @children slot) flush against the row's
+// right edge.  Earlier attempts tried
+// ``horizontal-stretch: 1`` on both clusters with
+// ``alignment: start`` - that made Slint split the row
+// in half, so trailing widgets landed centred in the
+// right half rather than pinned right.
+
+import { MaterialPalette } from "@material";
+import { MaterialText } from "@material";
+
+
+export component SettingRow inherits Rectangle {
+    in property <string> glyph: "";
+    in property <string> title: "";
+    in property <string> content: "";
+    in property <bool> enabled: true;
+
+    height: root.content != "" ? 70px : 50px;
+    background: MaterialPalette.surface_container;
+    border-radius: 8px;
+    opacity: root.enabled ? 1.0 : 0.38;
+
+    HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 16px;
+        spacing: 0px;
+        alignment: space-between;
+        cross-axis-alignment: center;
+
+        // ---- Left cluster (icon + title) ----------------
+        HorizontalLayout {
+            spacing: 16px;
+            alignment: start;
+            cross-axis-alignment: center;
+
+            if root.glyph != "" : Text {
+                text: root.glyph;
+                color: MaterialPalette.primary;
+                font-size: 24px;
+            }
+
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: 2px;
+                cross-axis-alignment: start;
+
+                MaterialText {
+                    text: root.title;
+                    color: MaterialPalette.on_surface;
+                    style: { font_size: 14px, font_weight: 500 };
+                    overflow: elide;
+                    width: 100%;
+                }
+
+                if root.content != "" : MaterialText {
+                    text: root.content;
+                    color: MaterialPalette.on_surface_variant;
+                    style: { font_size: 12px, font_weight: 400 };
+                    wrap: word_wrap;
+                    width: 100%;
+                }
+            }
+        }
+
+        // ---- Right cluster (trailing @children) ---------
+        // Variants that supply multiple sub-controls
+        // (Switch + label, Slider + readout, button +
+        // chevron) put them all as siblings here.  The
+        // 12px spacing between them is the M3-recommended
+        // gap between a control and its inline label.
+        HorizontalLayout {
+            spacing: 12px;
+            alignment: start;
+            cross-axis-alignment: center;
+
+            @children
+        }
+    }
+}

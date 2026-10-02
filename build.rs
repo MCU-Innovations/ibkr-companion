@@ -1,5 +1,20 @@
 fn main() {
-    slint_build::compile("ui/app.slint").expect("compile Slint UI");
+    // Use the same Material component library registration as ECU Workbench.
+    // It lets the UI import Slint's Material widgets through `@material`.
+    let material = std::path::PathBuf::from(
+        "D:/MCUi/_third_party/slint/ui-libraries/material/src/material.slint",
+    );
+    assert!(
+        material.exists(),
+        "Slint Material library was not found: {}",
+        material.display()
+    );
+    let library_paths = std::collections::HashMap::from([("material".to_string(), material)]);
+    slint_build::compile_with_config(
+        "ui/app.slint",
+        slint_build::CompilerConfiguration::new().with_library_paths(library_paths),
+    )
+    .expect("compile Slint UI");
 
     #[cfg(windows)]
     {

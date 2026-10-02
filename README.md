@@ -1,6 +1,6 @@
 # IBKR Companion
 
-A native, read-only re-entry watchlist built with Rust and Slint. All broker data comes directly from the **local IBKR Client Portal Gateway**. The app does not call the dashboard, Flex Web Service, Yahoo, or any other data provider.
+A native, read-only re-entry watchlist built with Rust and Slint. All broker data comes directly from the **local IBKR Client Portal Gateway**. Quotes, positions, trades and alerts use IBKR. Company fundamentals (market cap, sector and industry) load asynchronously from Yahoo Finance by default, with optional FMP support. The app does not call the dashboard or Flex Web Service.
 
 ## Run
 
@@ -8,6 +8,8 @@ A native, read-only re-entry watchlist built with Rust and Slint. All broker dat
 2. From this directory, run `cargo run --release`.
 
 The release executable attaches to the launching terminal on Windows when one is present, using the same early console attachment pattern as `ecuwb-rs`. Launching it from Explorer does not open a console. Console diagnostics show startup, snapshot results, WebSocket connections, subscriptions, and errors. Set `IBKR_COMPANION_LOG=debug` before launching to include individual Client Portal HTTP requests; use `off`, `error`, `warn`, or `info` to adjust verbosity (default: `info`).
+
+The Options page includes a **Premiums Collected** list of recorded option sell executions, newest first, with contract, account, sale time, quantity, premium per share, and IBKR-reported proceeds. Sales are deduplicated by execution ID and retained in `option-premium-sales.json` alongside settings. Initial history is limited to the recent executions returned by Client Portal (up to seven days); the archive accumulates sales observed afterward. Both opening and closing sales are included; buybacks are not deducted, so this is not net strategy profit. Totals remain separate by currency, and rows with unavailable proceeds or unconfirmed currency do not contribute to totals.
 
 The window can be resized or maximized. Recent exits appear in a compact table with **Best Buy** and share-weighted **VWAP Buy** immediately before the exit price, followed by the market price, move, and target. Either buy value turns yellow when the displayed market price is below it. Wider windows also show the exit time. The table starts sorted by **VS EXIT** ascending. Click a column header to sort and click it again to reverse the order. Rows without a value for that column stay at the end. The detail pane starts hidden; selecting a row opens it. Use **Hide details** in the pane or list header to close it, and **Show details** to reopen it.
 
@@ -81,3 +83,54 @@ A captured Client Portal batch can be recovered with
 closed. This validates current Gateway holdings and verifies the requested stocks
 appear in rendered exit rows before saving, and backs up the existing history.
 This recovery accepts the app's captured Client Portal JSON, not CSV or another API.
+
+### Portfolio sector heatmap
+
+The portfolio heatmap groups held stocks by sector. The **Cell size** selector
+switches between portfolio value in USD (default) and company market capitalization.
+Multiple accounts holding the same stock share a single cell. Hover a cell to read
+its symbol, classification, daily change, and position value. The layout adapts to
+window size. Unknown values appear separately as equal-sized cells, labeled as
+unavailable, rather than being assigned invented weights.
+
+Yahoo Finance supplies market capitalization, sector, and industry without an API
+key. Opening the portfolio queues the held stocks; a separate Tokio worker fetches
+up to four profiles in parallel, deduplicates requests, and caches profiles for 24 hours in
+`fundamentals-cache.json` beside the user's saved settings. Cached values remain
+available while refreshes run. Reopening the portfolio, restarting the app, or
+checking the daily cache does not refetch profiles less than 24 hours old.
+All HTTP requests share a rolling rate limiter (at most four requests per second;
+Yahoo: 120 per minute; FMP: 60 per minute and 250 per rolling 24 hours). Yahoo
+has no published stable API quota, so these are conservative client limits,
+with server throttling taking precedence. FMP usage and provider cooldowns are
+persisted in `fundamentals-rate-limits.json`. Failed symbols retry after a delay,
+with retry times persisted in the daily cache; HTTP 429 pauses
+all profile requests, respecting Retry-After. Native Yahoo sessions renew their
+cookie and crumb once when a session expires. Yahoo's endpoints are unofficial
+and availability can change; failures are shown in the portfolio and settings.
+Non-USD market caps use IBKR's exchange rates before participating in the treemap.
+
+Open **Settings** from the navigation drawer to choose Yahoo Finance or Financial
+Modeling Prep, enable/disable fetching, refresh cached data, and add, replace, or
+remove an optional FMP API key. **Save settings** applies changes. Settings uses
+the ECU Workbench full-page card layout above the current workspace; the title-bar
+burger becomes Back, and Esc dismisses the same page even with a focused input.
+Closing settings restores the original workspace with the navigation drawer open.
+FMP credentials are sent in a sensitive request header and encrypted with Windows
+DPAPI in `backends.dat`, scoped to the current Windows user. They are never logged
+or returned in view snapshots. Unix builds store settings in a user-only file.
+FMP endpoint access depends on the key's plan; Yahoo remains the free default.
+
+The previous optional `IBKR_MARKET_CAP_FILE` JSON mapping is still supported as a
+fallback for symbols without a provider market cap, using values in USD.
+To check Yahoo independently of IBKR, run:
+`ibkr-companion.exe --check-fundamentals AAPL`.
+
+Data references: https://finance.yahoo.com/quote/AAPL/ and
+https://site.financialmodelingprep.com/developer/docs/quickstart
+
+The **Options** entry in the navigation drawer lists open IBKR option positions separately from stocks. Each contract shows its account, currency, multiplier, long/short quantity, expiry and days remaining, market value, average cost and P/L, bid/ask/last/mark, quote time and availability, Greeks, implied volatility, volume, and open interest when supplied by IBKR. **Share Cost** is the underlying shares' average purchase price per share from the latest IBKR position refresh, matched by account, underlying contract ID, and currency. It uses `avgPrice`, falling back to `avgCost` divided by the reported multiplier (one for stocks with no positive multiplier). It shows an em dash when no long underlying position or cost is available; it does not allocate particular share lots to options. Expirations within seven calendar days are highlighted. Missing fields display an em dash; option contract multipliers are never assumed. Options use regular market-data subscriptions, without overnight equity subscriptions.
+
+The Options overview uses sortable compact rows for symbol, strike/type, expiry, days to expiry, signed position, mark and quote availability, unrealized P/L, return on absolute cost basis, and delta. Select a row to open the right-hand details panel; Close or Escape dismisses it. Selection follows the account/contract ID through sorting and quote updates. Totals stay separated by currency. Embedded OCC codes in IBKR descriptions supply missing expiry dates.
+
+Options also show the underlying market price next to strike/type and an ITM/ATM/OTM column. Underlying contracts are resolved from IBKR contract metadata or streaming field 6457 and subscribed even when no stock position is held. Quote availability is displayed beneath the price. ATM means price and strike match at two decimal places; missing quotes produce no classification. Moneyness follows call/put direction regardless of whether the position is long or short.

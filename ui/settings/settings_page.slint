@@ -1,0 +1,72 @@
+import { Button, CheckBox, ComboBox, LineEdit } from "std-widgets.slint";
+import { MaterialPalette, MaterialText } from "@material";
+import { PageCard } from "page_card.slint";
+import { SettingCardGroup } from "setting_group.slint";
+import { SettingRow } from "setting_row.slint";
+
+// Adapted from ECU Workbench's SettingsPage: the same PageCard shell,
+// scrollable body, named groups, and SettingRow cards.
+export component BackendSettingsPage inherits PageCard {
+    title: "Settings";
+    subtitle: "Data sources and API keys";
+    body-is-placeholder: false;
+    in-out property <int> provider: 0;
+    in-out property <bool> enabled: true;
+    in property <bool> key-set: false;
+    in property <string> status;
+    private property <string> draft-key: "";
+    callback saved(int, bool, string, bool);
+    callback refresh-requested();
+
+    VerticalLayout {
+        spacing: 28px;
+        SettingCardGroup {
+            title: "Stock fundamentals";
+            SettingRow {
+                title: "Data source";
+                content: "Yahoo Finance needs no API key. FMP is an optional keyed backend.";
+                ComboBox { model: ["Yahoo Finance (free)", "Financial Modeling Prep"]; current-index <=> root.provider; preferred-width: 250px; }
+            }
+            SettingRow {
+                title: "Fetch company profiles";
+                content: "Load market cap, sector and industry when the portfolio needs them.";
+                CheckBox { text: "Enabled"; checked <=> root.enabled; }
+            }
+            SettingRow {
+                title: "Cached fundamentals";
+                content: "Profiles are cached for 24 hours. Only missing or expired profiles are fetched.";
+                Button { text: "Check daily cache"; enabled: root.enabled; clicked => { root.refresh-requested(); } }
+            }
+        }
+        SettingCardGroup {
+            title: "API keys";
+            SettingRow {
+                title: "Financial Modeling Prep";
+                content: root.key-set ? "An API key is saved. Enter a new key to replace it." : "Optional. Yahoo Finance works without a key.";
+                LineEdit {
+                    text <=> root.draft-key;
+                    input-type: password;
+                    placeholder-text: root.key-set ? "Replace saved API key" : "Enter FMP API key";
+                    preferred-width: 270px;
+                }
+                Button {
+                    text: "Remove"; enabled: root.key-set;
+                    clicked => { root.draft-key = ""; root.saved(root.provider, root.enabled, "", true); }
+                }
+            }
+        }
+        HorizontalLayout {
+            alignment: end;
+            Button {
+                text: "Save settings";
+                clicked => { root.saved(root.provider, root.enabled, root.draft-key, false); root.draft-key = ""; }
+            }
+        }
+        MaterialText {
+            text: root.status;
+            color: MaterialPalette.on_surface_variant;
+            style: { font_size: 13px };
+            wrap: word-wrap; min-width: 0px;
+        }
+    }
+}

@@ -1,0 +1,161 @@
+// Page template: header card on top + body card below.
+//
+// Two ``surface_container_low`` cards stacked vertically
+// in a single page: a header card holding the title (and
+// optional subtitle), and a body card which either
+// populates its ``@children`` slot with arbitrary content
+// or shows a centered "coming soon" placeholder.
+//
+// Mirrors the qfluentwidgets ``SettingInterface`` recipe
+// (``_third_party/PyQt-Fluent-Widgets/qfluentwidgets/
+// components/settings/setting_card.py`` + the production
+// ``ECUwb/src/view/misc/setting_interface.py``):
+//   * the header card holds the page title and an
+//     optional subtitle;
+//   * the body card is a real ``ScrollView`` so it never
+//     overflows the visible viewport - that's exactly
+//     what qfluentwidgets does with their ``ScrollArea``;
+//   * the body card's ``@children`` slot is what each
+//     page populates with its real content (today:
+//     ``SettingsCardGroup`` placeholders; tomorrow:
+//     real ``SettingCard`` rows inside one or more
+//     groups).
+//
+// Component name: ``PageCard`` (short snake_case to match
+// the rest of ``ui/components/``: ``nav_row``,
+// ``nav_separator``, ``icon_glyph``, ``home_banner``, ...).
+// ``PlaceholderPage`` is the v1 thin wrapper around it
+// - keeps every existing placeholder page compiling
+// unchanged while we extend this template with real
+// body content (SettingsCardGroup + SettingCard, etc.).
+
+import { MaterialPalette } from "@material";
+import { MaterialText } from "@material";
+import { ScrollView } from "std-widgets.slint";
+
+export component PageCard inherits Rectangle {
+    in property <string> title: "";
+    in property <string> subtitle: "";
+    in property <bool> show-header: true;
+    in property <bool> body-is-placeholder: true;
+    in property <string> placeholder-text: "coming soon";
+
+    background: MaterialPalette.background;
+
+    VerticalLayout {
+        x: 24px;
+        y: 24px;
+        width: parent.width - 48px;
+        height: parent.height - 48px;
+        spacing: 16px;
+
+        // ---- Header card -------------------------------
+        if root.show-header : Rectangle {
+            width: 100%;
+            height: 96px;
+            background: MaterialPalette.surface_container_low;
+            border-radius: 16px;
+
+            VerticalLayout {
+                x: 24px;
+                y: 0px;
+                width: parent.width - 48px;
+                height: 100%;
+                alignment: center;
+                spacing: 4px;
+
+                MaterialText {
+                    text: root.title;
+                    color: MaterialPalette.on_surface;
+                    style: { font_size: 22px, font_weight: 600 };
+                    horizontal-alignment: center;
+                }
+
+                if root.subtitle != "" : MaterialText {
+                    text: root.subtitle;
+                    color: MaterialPalette.on_surface_variant;
+                    style: { font_size: 14px, font_weight: 400 };
+                    horizontal-alignment: center;
+                }
+            }
+        }
+
+        // ---- Body card ---------------------------------
+        // ``vertical-stretch: 1`` makes this card fill
+        // whatever vertical space the header card didn't
+        // claim.  The internal ``ScrollView`` keeps the
+        // page usable when the body content overflows
+        // (mirrors qfluentwidgets'
+        // ``ScrollArea(parent=self.scrollWidget)``).
+        //
+        // Slint does not allow ``@children`` to appear
+        // inside an ``if`` block, so a single body
+        // subtree is the active content; the flag
+        // chooses between the v1 "coming soon" body
+        // and real body content (which each
+        // ``SettingsInterface``-style page fills in
+        // via an outer wrapper).
+        Rectangle {
+            width: 100%;
+            vertical-stretch: 1;
+            background: MaterialPalette.surface_container_low;
+            border-radius: 16px;
+
+            ScrollView {
+                width: 100%;
+                height: 100%;
+                vertical-scrollbar-policy: ScrollBarPolicy.as-needed;
+                horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
+
+                VerticalLayout {
+                    width: 100%;
+                    spacing: 16px;
+                    padding: 24px;
+
+                    // ``@children`` must appear at the
+                    // top level (no conditional wrapper
+                    // allowed), so it always anchors
+                    // here.  When the subclass has no
+                    // children of its own the slot is
+                    // empty - the inline placeholder
+                    // block covers that case.
+                    @children
+
+                    if root.body-is-placeholder : Rectangle {
+                        width: 100%;
+                        // ``min-height`` is what makes
+                        // the placeholder visible even
+                        // when the body is otherwise
+                        // empty; without it the empty
+                        // @children slot would collapse
+                        // the ScrollView and the
+                        // placeholder card looks empty.
+                        min-height: 80px;
+
+                        MaterialText {
+                            width: 100%;
+                            height: 100%;
+                            text: root.placeholder-text;
+                            color: MaterialPalette.on_surface_variant;
+                            style: { font_size: 14px, font_weight: 400 };
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// v1 ``PlaceholderPage`` thin wrapper.  Subclasses
+// (``AdaptersPage``, ``SettingsPage``, ...) keep
+// ``inherits PlaceholderPage`` and only set ``title`` +
+// ``subtitle``.  When the real settings interface
+// arrives, ``SettingsPage`` (and friends) switch to
+// ``inherits PageCard`` with ``body-is-placeholder`` =
+// false plus a real SettingsCardGroup / SettingCard
+// subtree inside the ``@children`` slot.
+export component PlaceholderPage inherits PageCard {
+    body-is-placeholder: true;
+}
