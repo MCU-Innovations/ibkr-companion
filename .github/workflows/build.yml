@@ -52,6 +52,7 @@ jobs:
             target/release/ibkr-companion.exe
             README.md
             THIRD_PARTY.md
-            third_party/material/LICENSE.md
+            third_party/slint/LICENSES/
+            third_party/slint/ui-libraries/material/src/LICENSE.md
           if-no-files-found: error
           retention-days: 30

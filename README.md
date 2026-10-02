@@ -12,7 +12,7 @@ A native, read-only re-entry watchlist built with Rust and Slint. All broker dat
 
 GitHub Actions runs tests and builds the release executable on every push and pull request, and can also be started from the Actions tab using **Run workflow**. Successful runs provide an `ibkr-companion-windows-x64` artifact containing the executable and documentation. No IBKR login or API credentials are needed for CI; the authenticated Gateway integration test stays ignored.
 
-Slint is pinned in `slint-revision.txt` and checked out into the ignored `third_party/slint` directory. The Material widget sources, including the application's customizations, are tracked in `third_party/material`. This removes the build's dependency on a particular developer's drive layout. To update Slint, change the revision and update the Material sources together.
+Slint is pinned in `slint-revision.txt` and checked out into the ignored `third_party/slint` directory. Both Rust dependencies and Material widgets come directly from this upstream checkout. No MCUi checkout or custom Slint changes are needed. To update Slint, change the revision and rerun the tests against that checkout.
 
 The release executable attaches to the launching terminal on Windows when one is present, using the same early console attachment pattern as `ecuwb-rs`. Launching it from Explorer does not open a console. Console diagnostics show startup, snapshot results, WebSocket connections, subscriptions, and errors. Set `IBKR_COMPANION_LOG=debug` before launching to include individual Client Portal HTTP requests; use `off`, `error`, `warn`, or `info` to adjust verbosity (default: `info`).
 
