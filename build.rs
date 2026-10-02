@@ -1,9 +1,9 @@
 fn main() {
     // Use the same Material component library registration as ECU Workbench.
     // It lets the UI import Slint's Material widgets through `@material`.
-    let material = std::path::PathBuf::from(
-        "D:/MCUi/_third_party/slint/ui-libraries/material/src/material.slint",
-    );
+    let material = std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap())
+        .join("third_party/material/material.slint");
+    println!("cargo:rerun-if-changed=third_party/material");
     assert!(
         material.exists(),
         "Slint Material library was not found: {}",
