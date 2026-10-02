@@ -51,6 +51,8 @@ jobs:
           path: |
             target/release/ibkr-companion.exe
             README.md
+            LICENSE.md
+            resources/MadeWithSlint-logo-whitebg.png
             THIRD_PARTY.md
             third_party/slint/LICENSES/
             third_party/slint/ui-libraries/material/src/LICENSE.md

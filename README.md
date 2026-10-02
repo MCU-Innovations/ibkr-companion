@@ -1,6 +1,12 @@
 # IBKR Companion
 
+![Made with Slint](resources/MadeWithSlint-logo-whitebg.png)
+
 A native, read-only re-entry watchlist built with Rust and Slint. All broker data comes directly from the **local IBKR Client Portal Gateway**. Quotes, positions, trades and alerts use IBKR. Company fundamentals (market cap, sector and industry) load asynchronously from Yahoo Finance by default, with optional FMP support. The app does not call the dashboard or Flex Web Service.
+
+## License
+
+The project's own code is available under the [PolyForm Noncommercial License 1.0.0](LICENSE.md). Noncommercial use, modification, and redistribution are permitted under its terms. Commercial use is not granted by this license; contact the repository maintainers for separate permission. Third-party dependencies retain their own licenses, as described in [THIRD_PARTY.md](THIRD_PARTY.md).
 
 ## Run
 
