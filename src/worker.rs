@@ -765,24 +765,30 @@ fn ingest_trades(state: &mut State, rows: &[Value]) -> bool {
 }
 
 fn merged_executions(state: &State) -> HashMap<String, Execution> {
-    let mut earliest = HashMap::<(String, i64), NaiveDate>::new();
-    for fill in state.executions.values() {
-        let key = (fill.account.clone(), fill.conid);
-        let day = market::eastern_date(fill.at);
-        earliest
-            .entry(key)
-            .and_modify(|current| *current = (*current).min(day))
-            .or_insert(day);
-    }
+    // PA has dates rather than execution timestamps. Match overlapping quantities
+    // by account, contract, Eastern trading day, side and price; keep history
+    // outside the archive's coverage, including later sales and partial days.
+    let mut coverage: Vec<_> = state.executions.values().map(|fill| {
+        (fill.account.clone(), fill.conid, market::eastern_date(fill.at),
+         fill.side, fill.price, fill.size)
+    }).collect();
     let mut merged = state.executions.clone();
     for history in state.cost_history.values() {
         for fill in history {
-            let key = (fill.account.clone(), fill.conid);
-            if earliest
-                .get(&key)
-                .is_none_or(|first_day| fill.at.date_naive() < *first_day)
-            {
+            let mut remaining = fill.size;
+            for (account, conid, day, side, price, quantity) in &mut coverage {
+                if *account == fill.account && *conid == fill.conid
+                    && *day == fill.at.date_naive() && *side == fill.side
+                    && (*price - fill.price).abs() < 1e-7
+                {
+                    let overlap = remaining.min(*quantity);
+                    remaining -= overlap;
+                    *quantity -= overlap;
+                }
+            }
+            if remaining > 1e-7 {
                 let mut fill = fill.clone();
+                fill.size = remaining;
                 // PA dates have no execution time; normalize old midnight cache entries.
                 fill.at += chrono::Duration::hours(12);
                 merged.insert(fill.id.clone(), fill);
@@ -1882,7 +1888,7 @@ pub async fn run(
                     for key in &keys { state.cost_pending.remove(key); }
                     match result {
                         Ok(history) => {
-                            crate::diagnostics::debug(format_args!(
+                            crate::diagnostics::info(format_args!(
                                 "Loaded Client Portal history for {} stocks ({} transactions)",
                                 history.len(), history.values().map(Vec::len).sum::<usize>()
                             ));
@@ -2365,6 +2371,37 @@ mod tests {
         assert_eq!(sales[0].best_buy, Some(149.33));
         assert_eq!(sales[0].average_cost, Some(149.33));
         assert_eq!(view(&state).rows[0].best_buy, "149.33");
+    }
+
+    #[test]
+    fn history_keeps_later_sales_and_unarchived_same_day_fills() {
+        let mut state = State::default();
+        state.accounts.push("U1".into());
+        state.positions_loaded = true;
+        let buy = Execution {
+            id: "buy".into(), account: "U1".into(), conid: 1,
+            symbol: "TEST".into(), side: crate::model::Side::Buy,
+            size: 2.0, price: 10.0,
+            at: Utc.with_ymd_and_hms(2026, 9, 24, 14, 0, 0).unwrap(),
+        };
+        state.executions.insert(buy.id.clone(), buy);
+        let history = [("Buy", 3.0, 10.0, 24), ("Sell", -3.0, 15.0, 25)]
+            .into_iter().enumerate().map(|(index, (kind, qty, price, day))| {
+                Execution::parse_pa_transaction(&serde_json::json!({
+                    "acctid": "U1", "conid": 1,
+                    "date": format!("Thu Sep {day} 00:00:00 EDT 2026"),
+                    "type": kind, "qty": qty, "pr": price
+                }), "U1", 1, "TEST", index).unwrap()
+            }).collect();
+        state.cost_history.insert("U1:1".into(), history);
+        let merged = merged_executions(&state);
+        let bought: f64 = merged.values().filter(|f| f.side == crate::model::Side::Buy)
+            .map(|f| f.size).sum();
+        assert_eq!(bought, 3.0);
+        let sales = observed_sales(&state);
+        assert_eq!(sales.len(), 1);
+        assert_eq!(market::eastern_date(sales[0].at), NaiveDate::from_ymd_opt(2026, 9, 25).unwrap());
+        assert_eq!(sales[0].price, 15.0);
     }
 
     #[test]

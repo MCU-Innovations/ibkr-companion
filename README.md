@@ -53,7 +53,10 @@ The streaming subscriptions use IBKR's [`str` trades](https://ibkrcampus.com/doc
 The exit-date filter offers 1 Week, 1 Month, 1 Year, Year to Date, and Inception (default).
 Best Buy is the lowest recorded purchase price; VWAP Buy is total purchase value divided
 by total purchased shares across all available cycles. Neither is restricted by the exit filter.
-Older Portfolio Analyst sales now participate in the exit list; one latest exit per stock is retained.
+Older Portfolio Analyst sales participate in the exit list; one latest exit per stock is retained.
+History also fills gaps after archived executions. Overlapping fills are deduplicated by
+account, contract, trading date, side, price and quantity, including partially archived days.
+Successful history loads are logged at the default info level.
 History requests cover all dates back to 1970, rather than stopping at one year, and run asynchronously
 for contracts known from executions, cached history, and portfolio positions. Requests remain paced
 at one per 15 minutes, in batches of up to 19 contracts per account. Missing
