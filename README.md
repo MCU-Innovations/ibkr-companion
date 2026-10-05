@@ -6,19 +6,19 @@ A native, read-only re-entry watchlist built with Rust and Slint. All broker dat
 
 ## License
 
-The project's own code is available under the [PolyForm Noncommercial License 1.0.0](LICENSE.md). Noncommercial use, modification, and redistribution are permitted under its terms. Commercial use is not granted by this license; contact the repository maintainers for separate permission. Third-party dependencies retain their own licenses, as described in [THIRD_PARTY.md](THIRD_PARTY.md).
+The project's own code is available under the [PolyForm Noncommercial License 1.0.0](LICENSE.md). Noncommercial use, modification, and redistribution are permitted under its terms. Commercial use is not granted by this license; contact the repository maintainers for separate permission. Third-party dependencies retain their own licenses. Slint's license notices and the Material widgets' MIT license are included in the official upstream source fetched by Cargo.
 
 ## Run
 
 1. Start Client Portal Gateway and complete its browser login.
-2. Install Rust 1.95.0 or newer and run `./scripts/bootstrap.ps1` once to fetch the pinned Slint source.
+2. Install Rust 1.95.0 or newer. Cargo fetches official upstream Slint automatically.
 3. From this directory, run `cargo run --release --locked`.
 
 ## Automatic Windows builds
 
 GitHub Actions runs tests and builds the release executable on every push and pull request, and can also be started from the Actions tab using **Run workflow**. Successful runs provide an `ibkr-companion-windows-x64` artifact containing the executable and documentation. No IBKR login or API credentials are needed for CI; the authenticated Gateway integration test stays ignored.
 
-Slint is pinned in `slint-revision.txt` and checked out into the ignored `third_party/slint` directory. Both Rust dependencies and Material widgets come directly from this upstream checkout. No MCUi checkout or custom Slint changes are needed. To update Slint, change the revision and rerun the tests against that checkout.
+Slint and slint-build use the official `slint-ui/slint` Git repository, pinned in `Cargo.toml` and `Cargo.lock`. Material widgets are loaded from that same dependency in Cargo's cache. No project-local Slint checkout or bootstrap script is needed.
 
 The release executable attaches to the launching terminal on Windows when one is present, using the same early console attachment pattern as `ecuwb-rs`. Launching it from Explorer does not open a console. Console diagnostics show startup, snapshot results, WebSocket connections, subscriptions, and errors. Set `IBKR_COMPANION_LOG=debug` before launching to include individual Client Portal HTTP requests; use `off`, `error`, `warn`, or `info` to adjust verbosity (default: `info`).
 

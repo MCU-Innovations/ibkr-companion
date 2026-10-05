@@ -18,19 +18,6 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-      - name: Read pinned Slint revision
-        shell: pwsh
-        run: |
-          $revision = (Get-Content slint-revision.txt -Raw).Trim()
-          if ($revision -notmatch '^[0-9a-f]{40}$') { throw 'Invalid Slint revision' }
-          "SLINT_REVISION=$revision" >> $env:GITHUB_ENV
-      - name: Check out Slint
-        uses: actions/checkout@v4
-        with:
-          repository: slint-ui/slint
-          ref: ${{ env.SLINT_REVISION }}
-          path: third_party/slint
-          persist-credentials: false
       - name: Install Rust
         shell: pwsh
         run: |
@@ -39,7 +26,7 @@ jobs:
       - name: Cache Cargo build
         uses: Swatinem/rust-cache@v2
         with:
-          key: windows-slint-${{ env.SLINT_REVISION }}
+          key: windows-slint
       - name: Test
         run: cargo test --locked
       - name: Build release
@@ -53,8 +40,5 @@ jobs:
             README.md
             LICENSE.md
             resources/MadeWithSlint-logo-whitebg.png
-            THIRD_PARTY.md
-            third_party/slint/LICENSES/
-            third_party/slint/ui-libraries/material/src/LICENSE.md
           if-no-files-found: error
           retention-days: 30

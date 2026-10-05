@@ -14,7 +14,7 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-slint = { path = "third_party/slint/api/rs/slint", features = ["unstable-winit-030"] }
+slint = { git = "https://github.com/slint-ui/slint", rev = "80a488e55fac3a72a74fe367c0640a9e95f622fb", features = ["unstable-winit-030"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "fs"] }
 tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
 url = "2"
@@ -23,7 +23,8 @@ url = "2"
 windows-sys = { version = "0.61", features = ["Win32_System_Console", "Win32_Security_Cryptography", "Win32_System_Memory"] }
 
 [build-dependencies]
-slint-build = { path = "third_party/slint/api/rs/build" }
+slint-build = { git = "https://github.com/slint-ui/slint", rev = "80a488e55fac3a72a74fe367c0640a9e95f622fb" }
+serde_json = "1"
 
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1.12"
